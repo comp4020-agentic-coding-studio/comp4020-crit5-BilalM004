@@ -32,8 +32,12 @@ Deliverables for the week, roughly in build order:
 1. ~~Game scaffolding (canvas, game loop)~~ — done
 2. ~~Input handling (keyboard on desktop, joystick + jump button + drag-to-aim
    on touch)~~ — done
-3. ~~Movement and swing physics (feel)~~ — done (constants still to be tuned
-   by playing, in deliverable 10)
+3. ~~Movement and swing physics (feel)~~ — done, playtested and signed off.
+   Two rounds of that playtest changed real behaviour rather than numbers:
+   a web fired from the ground died in one tick (`1b1001d`), and swinging
+   into a wall froze the player against it (`5f2e352`). Constants were then
+   tuned from play (`2f8cc91`); more may move in deliverable 10 once there
+   is a finished build to play.
 4. Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)
 5. Enemies and their projectiles
 6. Level layouts (a small number of levels, increasing difficulty)
