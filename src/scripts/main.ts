@@ -1,3 +1,13 @@
+import type { Enemy, Projectile } from "./game/entities";
+import {
+  createDocOck,
+  createVenom,
+  damageEnemy,
+  enemyHitbox,
+  projectileHitbox,
+  stepEnemy,
+  stepProjectile,
+} from "./game/entities";
 import type { Rect, Vec2 } from "./game/geometry";
 import { attachInput, createInputState, resetFrameEvents } from "./game/input";
 import {
@@ -45,10 +55,25 @@ const platforms: readonly Rect[] = [
 
 const cfg = DEFAULT_PHYSICS;
 const player = createPlayer(PLAYER_START);
+// PLACEHOLDER (deliverable 8 owns real game state): a bare number so hits from
+// this deliverable's enemies have something to land on, ahead of a real HUD.
+let playerHealth = 100;
 
-// PLACEHOLDER (deliverable 5 adds entities.ts): no enemies exist yet, so every
-// shot can only ever resolve to 'anchor' or 'miss'.
-const level: WebTargetLevel = { platforms };
+// PLACEHOLDER (deliverable 6 replaces this with level.ts's per-level configs):
+// one of each boss, standing on the two rooftops, so both attack patterns are
+// exercised before levels exist to house them properly.
+const enemies: Enemy[] = [
+  createDocOck({ x: 500, y: 612 }), // 700 - DOC_OCK_H, feet on the near rooftop
+  createVenom({ x: 1700, y: 630 }), // 700 - VENOM_H, feet on the far rooftop
+];
+const projectiles: Projectile[] = [];
+
+const level: WebTargetLevel = {
+  platforms,
+  get enemies() {
+    return enemies.map((e) => ({ id: e.id, hitbox: enemyHitbox(e) }));
+  },
+};
 
 // The camera is a pure translation that keeps the player at a fixed spot on
 // screen. Kept as a function rather than inlined in draw() because aiming has
@@ -76,18 +101,39 @@ function update(dt: number): void {
     // back into linear velocity, which the new attach then inherits.
     if (player.swing) releaseWeb(player, cfg, false);
     const target = resolveWebTarget(playerCenter(player), aimDirection(), level);
-    if (target.type === "anchor") attachWeb(player, target.point, cfg);
-    // 'enemy' applies damage once deliverable 5 gives enemies health to lose.
+    if (target.type === "anchor") {
+      attachWeb(player, target.point, cfg);
+    } else if (target.type === "enemy" && target.enemy) {
+      const hit = enemies.find((e) => e.id === target.enemy!.id);
+      // Real damage/removal is deliverable 8's job; here it's enough to prove
+      // a resolved 'enemy' shot reaches an enemy's health at all.
+      if (hit && damageEnemy(hit, 1)) {
+        enemies.splice(enemies.indexOf(hit), 1);
+      }
+    }
+  }
+
+  for (const enemy of enemies) {
+    const result = stepEnemy(enemy, { hitbox: playerRect(player) }, dt);
+    if (result.hitPlayer) playerHealth -= result.damage;
+    if (result.spawnedProjectile) projectiles.push(result.spawnedProjectile);
+  }
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    const result = stepProjectile(p, { hitbox: playerRect(player) }, dt);
+    if (result.hitPlayer) playerHealth -= p.damage;
+    if (result.done) projectiles.splice(i, 1);
   }
 
   stepPlayer(player, input, platforms, cfg, dt);
 
   // PLACEHOLDER (deliverable 8 owns the real loss condition): respawn so a
-  // fall doesn't end the play session.
-  if (player.pos.y > KILL_PLANE_Y) {
+  // fall or a depleted health bar doesn't end the play session.
+  if (player.pos.y > KILL_PLANE_Y || playerHealth <= 0) {
     player.pos = { ...PLAYER_START };
     player.vel = { x: 0, y: 0 };
     player.swing = null;
+    playerHealth = 100;
   }
 
   resetFrameEvents(input);
@@ -133,11 +179,34 @@ function draw(): void {
     ctx.stroke();
   }
 
+  // Telegraphing reads as a colour change here; render.ts (deliverable 7)
+  // replaces this with the arm-extend/crouch animations the brief requires.
+  for (const enemy of enemies) {
+    const hitbox = enemyHitbox(enemy);
+    const telegraphing = enemy.phase === "melee-telegraph" || enemy.phase === "throw-telegraph" || enemy.phase === "telegraph";
+    ctx.fillStyle = telegraphing ? "#ffd166" : enemy.kind === "doc-ock" ? "#8a5cf5" : "#2ec4b6";
+    ctx.fillRect(hitbox.x, hitbox.y, hitbox.w, hitbox.h);
+  }
+  ctx.fillStyle = "#ff6b6b";
+  for (const p of projectiles) {
+    const hitbox = projectileHitbox(p);
+    ctx.fillRect(hitbox.x, hitbox.y, hitbox.w, hitbox.h);
+  }
+
   const box = playerRect(player);
   ctx.fillStyle = player.wallSide !== 0 ? "#ffd166" : "#e63946";
   ctx.fillRect(box.x, box.y, box.w, box.h);
 
   ctx.restore();
+
+  // PLACEHOLDER (deliverable 7/8 own the real HUD): a bare bar, in screen
+  // space, so health changes from this deliverable's attacks are visible
+  // without a debugger. fillRect only — the game-loop sensor's recording
+  // context stubs just the calls main.ts already made.
+  ctx.fillStyle = "rgba(245,245,245,0.25)";
+  ctx.fillRect(16, 16, 160, 10);
+  ctx.fillStyle = "#7dffb4";
+  ctx.fillRect(16, 16, 160 * Math.max(playerHealth, 0) / 100, 10);
 }
 
 // Fixed timestep so physics behaves the same regardless of display refresh

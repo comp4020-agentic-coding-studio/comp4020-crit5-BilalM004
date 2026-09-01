@@ -47,10 +47,25 @@ Deliverables for the week, roughly in build order:
 4. ~~Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)~~ —
    done. `web.ts`'s `resolveWebTarget` is a pure ray-vs-AABB targeting
    function (slab-method intersection, no marching), wired into `main.ts` in
-   place of the deliverable-3 placeholder. Enemy targeting is exercised by
-   type only for now — `entities.ts` (deliverable 5) doesn't exist yet, so
-   `main.ts` passes an empty enemy list.
-5. Enemies and their projectiles
+   place of the deliverable-3 placeholder. Enemy targeting now exercises real
+   enemies — see deliverable 5.
+5. ~~Enemies and their projectiles~~ — done. `entities.ts`'s `DocOckEnemy` and
+   `VenomEnemy` are a discriminated `Enemy` union, each a config object
+   (tunable numbers, level.ts's future per-spawn input) plus runtime state
+   (phase, timers), the same split physics.ts uses for
+   `PhysicsConfig`/`PlayerState`. Doc Ock's melee and thrown-block attacks run
+   as two independently-cooldowned tracks that never telegraph at once, so
+   the fairness constraint (one readable tell at a time) holds structurally
+   rather than by convention. Both the thrown block and Venom's leap reuse
+   one `ballisticVelocity` helper — a fixed-flight-time solve rather than a
+   fixed-angle one, so the same function produces a slow readable arc and a
+   fast leap. Wired into `main.ts` in place of the deliverable-4 empty enemy
+   list. Manual playtest (drag-fire at Doc Ock from `pnpm dev`) caught a
+   placement bug the type checker couldn't: Doc Ock's spawn `y` sank it 48px
+   into the rooftop platform, which also meant every web shot aimed at its
+   body hit the platform behind it first, on the "walls beat enemies on a
+   tie" rule — fixed by deriving the spawn from the platform's own `y`
+   instead of a guessed constant.
 6. Level layouts (a small number of levels, increasing difficulty)
 7. Rendering, characters/graphics, and HUD (player/enemy visuals, health
    bar, telegraphing enemy attacks)
