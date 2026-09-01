@@ -162,11 +162,17 @@ function draw(): void {
 // "catching up" on resume.
 const STEP_MS = 1000 / 60;
 const MAX_FRAME_MS = 250;
-let lastTime = performance.now();
+// Seeded from the first frame's own timestamp rather than performance.now():
+// the two only share a time origin by convention, and if they disagree the
+// first delta is negative, the accumulator goes negative, and update() never
+// runs again — a frozen game that still paints, which looks like a physics bug
+// rather than a clock bug. Clamping below at 0 makes that unrepresentable.
+let lastTime: number | null = null;
 let accumulatorMs = 0;
 
 function loop(now: number): void {
-  accumulatorMs += Math.min(now - lastTime, MAX_FRAME_MS);
+  if (lastTime === null) lastTime = now;
+  accumulatorMs += Math.min(Math.max(now - lastTime, 0), MAX_FRAME_MS);
   lastTime = now;
 
   while (accumulatorMs >= STEP_MS) {
