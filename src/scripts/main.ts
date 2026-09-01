@@ -1,11 +1,5 @@
 import type { Enemy, Projectile } from "./game/entities";
-import {
-  damageEnemy,
-  enemyHitbox,
-  projectileHitbox,
-  stepEnemy,
-  stepProjectile,
-} from "./game/entities";
+import { WEB_DAMAGE, damageEnemy, enemyHitbox, stepEnemy, stepProjectile } from "./game/entities";
 import type { Vec2 } from "./game/geometry";
 import { overlaps } from "./game/geometry";
 import { attachInput, createInputState, resetFrameEvents } from "./game/input";
@@ -20,6 +14,8 @@ import {
   releaseWeb,
   stepPlayer,
 } from "./game/physics";
+import type { Facing, WebShot } from "./game/render";
+import { cameraFor, cameraScale, createScene, drawFrame } from "./game/render";
 import { resolveWebTarget, type WebTargetLevel } from "./game/web";
 
 const canvasEl = document.querySelector<HTMLCanvasElement>("#game");
@@ -42,26 +38,106 @@ attachInput(canvas, input);
 
 const cfg = DEFAULT_PHYSICS;
 
-// PLACEHOLDER (deliverable 8 owns real game state): enough of a level cursor to
-// play all three levels end to end, which is the only way deliverable 6's
-// layouts can be verified at all. Reaching the door advances; dying restarts
-// the level rather than the run.
-let levelIndex = 0;
+// Health is a *run* resource, not a level one: it carries from level to level
+// and is only restored by starting the run over. That single choice is what
+// makes the difficulty curve mean anything — clearing level 2 at 12 health is a
+// different level 3 from clearing it at 80, and the player who wants the second
+// one has to earn it by dodging rather than by tanking. It also removes the
+// degenerate strategy a per-level refill creates, where walking into every
+// attack costs nothing as long as you reach the door.
+//
+// The corollary is that death has to undo the whole run rather than the level,
+// because a level-only retry with carried health would be unrecoverable: you
+// would respawn at the health that just killed you, forever.
+const MAX_HEALTH = 100;
+
+/** `?level=2` starts on level 2. Not a cheat and not shipped UI — there is no
+ *  link to it — it exists because levels 2 and 3 are behind a swing and a
+ *  wall-climb, so *looking at them* otherwise means playing level 1 first,
+ *  every time, including from a headless browser. The viewport check in spec/
+ *  uses it, and so does anyone tuning a boss. Clamped, so a typo starts at 1
+ *  rather than crashing on an undefined level. */
+function startingLevel(): number {
+  const raw = new URLSearchParams(window.location.search).get("level");
+  const n = raw === null ? 1 : Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(Math.max(n, 1), LEVELS.length) - 1;
+}
+
+/** Where a run begins and, therefore, where death sends you back to. Normally
+ *  level 1; `?level=N` moves it so that inspecting a boss headlessly does not
+ *  mean replaying the whole game every time something kills you. */
+const RUN_START = startingLevel();
+
+let levelIndex = RUN_START;
 let level: Level = LEVELS[levelIndex];
 let player = createPlayer(level.playerStart);
-let playerHealth = 100;
+let playerHealth = MAX_HEALTH;
 let enemies: Enemy[] = level.spawnEnemies();
 let projectiles: Projectile[] = [];
 
+// --- The web shot ------------------------------------------------------------
+//
+// A fired web used to be instantaneous: the frame you released, either a rope
+// existed or an enemy lost health, with nothing drawn in between. For the swing
+// that was survivable, because the rope itself is the feedback. For a shot at an
+// enemy it meant the game's one offensive action had *no* animation at all —
+// the only evidence a shot happened was a health pip going out, 14px above a
+// head nobody is looking at.
+//
+// So the strand now travels. What it must not do is delay the swing: the tuned
+// physics from deliverable 3 was signed off with attachment on the release
+// frame, and deferring it would both change that feel and open a real bug —
+// the player keeps moving during the flight, so by arrival they can be outside
+// `maxRopeLength`, where `attachWeb` silently refuses and the shot just does
+// nothing. Hence two commit times behind one animation: an anchor commits at
+// fire and the strand catches up to a rope that already exists, while an enemy
+// or a miss commits on arrival, which is the case where travel time is the
+// point. The player sees one mechanic; only the physics can tell them apart.
+const WEB_SHOT_SPEED = 3400; // px/s
+const WEB_SHOT_FADE_MS = 140;
+
+interface ShotState extends WebShot {
+  /** Distance from the firing point, so `progress` is a real speed rather than
+   *  a fixed duration — a shot across the map should not arrive as fast as one
+   *  at your feet. */
+  dist: number;
+  /** Damage owed on arrival. Carried as an id, not a reference: the enemy can
+   *  be gone by the time the strand lands. */
+  hitEnemyId: string | null;
+}
+
+let webShot: ShotState | null = null;
+
+// Which way the figure is drawn. Kept here rather than derived in render.ts
+// because it has to be *sticky*: velocity crosses zero every time the player
+// stops, and a facing recomputed from the sign of vel.x flips the sprite on
+// the frame a run ends. The threshold is a deadband, not a smoothing filter —
+// below it the last committed direction stands.
+let facing: Facing = 1;
+const FACING_SPEED = 24;
+
+/** Load a level, keeping the run's health. Everything else is rebuilt. */
 function loadLevel(index: number): void {
   levelIndex = index;
   level = LEVELS[index];
   player = createPlayer(level.playerStart);
-  playerHealth = 100;
+  // Level 1 spawns with the whole lesson to the right, and levels 2 and 3 with
+  // the boss there, so a fresh load always faces right.
+  facing = 1;
   // Fresh instances, so a retry never inherits the last attempt's half-dead
   // boss — see level.ts's spawnEnemies.
   enemies = level.spawnEnemies();
   projectiles = [];
+  // A strand still travelling toward the last level's geometry would otherwise
+  // land, on this level, at a coordinate that means nothing here.
+  webShot = null;
+}
+
+/** Back to the start, at full health. The only thing that refills the bar. */
+function startRun(): void {
+  playerHealth = MAX_HEALTH;
+  loadLevel(RUN_START);
 }
 
 // level.ts's Level satisfies web.ts's WebTargetLevel apart from `enemies`,
@@ -75,41 +151,16 @@ const webLevel: WebTargetLevel = {
   },
 };
 
-// The camera shows a fixed slice of *world*, not a fixed number of pixels.
-//
-// It used to be a plain translation, which silently made the viewport a
-// difficulty setting: at the two marking viewports (1920x1080 and 390x844) the
-// desktop player saw +/-960px of world and the phone player +/-195px, a 4.9x
-// advantage. Measured, that wasn't a cosmetic difference — on a phone every
-// swing anchor and both bosses were off-screen at spawn in levels 2 and 3,
-// so the opening frame taught nothing at the size deliverable 11 marks.
-//
-// Height sets the zoom, because how much *vertical* world you can see is what
-// decides whether an overhead anchor is findable, and a phone is not short of
-// height. Width only overrides it when the screen is narrow enough that VIEW_H
-// would crop the level sideways — which is exactly the portrait case, so a
-// phone zooms out instead of cropping. Both numbers are measured, not picked:
-// VIEW_H is the smallest that keeps every level's anchors and bosses in the
-// desktop opening frame, and MIN_VIEW_W the largest that keeps the player
-// above ~20px tall on a phone.
-const VIEW_H = 860;
-const MIN_VIEW_W = 800;
-
-/** World-pixels-to-screen-pixels for the current viewport. */
-function cameraScale(): number {
-  return Math.min(canvas.height / VIEW_H, canvas.width / MIN_VIEW_W);
-}
-
-/** World coordinate drawn at the screen's top-left corner. */
-function cameraOffset(): Vec2 {
-  const s = cameraScale();
-  const c = playerCenter(player);
-  return { x: c.x - canvas.width / (2 * s), y: c.y - (canvas.height * 0.6) / s };
+// The camera itself lives in render.ts (it is the number every draw function is
+// sized against, and the viewport check has to use the same one). This is the
+// wiring: it follows the player.
+function view() {
+  return cameraFor(playerCenter(player), canvas.width, canvas.height);
 }
 
 function screenToWorld(p: Vec2): Vec2 {
-  const s = cameraScale();
-  const cam = cameraOffset();
+  const s = cameraScale(canvas.width, canvas.height);
+  const { cam } = view();
   return { x: p.x / s + cam.x, y: p.y / s + cam.y };
 }
 
@@ -125,23 +176,60 @@ function aimDirection(): Vec2 {
   return { x: w.x - c.x, y: w.y - c.y };
 }
 
+/** Advance the strand, and settle up when it lands.
+ *
+ *  The damage is applied here rather than at fire time so that "the web reached
+ *  him" and "he took a hit" are the same event on screen. A shot resolved on
+ *  release and animated afterwards would light the hit flash before the strand
+ *  had left the hand, which is the sort of thing nobody consciously notices and
+ *  everybody feels as the hit not landing properly. */
+function stepWebShot(dt: number): void {
+  const shot = webShot;
+  if (!shot) return;
+
+  // An attached strand belongs to the rope now. Once it has caught up, or the
+  // player has let go, there is nothing left for it to animate.
+  if (shot.attached && (shot.progress >= 1 || !player.swing)) {
+    webShot = null;
+    return;
+  }
+
+  if (shot.progress < 1) {
+    shot.progress = Math.min(1, shot.progress + (WEB_SHOT_SPEED * dt) / Math.max(shot.dist, 1));
+    if (shot.progress >= 1 && shot.hitEnemyId !== null) {
+      const hit = enemies.find((e) => e.id === shot.hitEnemyId);
+      if (hit && damageEnemy(hit, WEB_DAMAGE)) enemies.splice(enemies.indexOf(hit), 1);
+      shot.hitEnemyId = null;
+    }
+    return;
+  }
+
+  // Landed and unattached: hold the splat briefly, then let it go. Without the
+  // hold, a strand that vanishes on the frame it arrives makes the entire
+  // animation a single-frame flicker at the far end.
+  shot.fade -= (dt * 1000) / WEB_SHOT_FADE_MS;
+  if (shot.fade <= 0) webShot = null;
+}
+
 function update(dt: number): void {
   if (input.fireWeb) {
     // Re-firing mid-swing: release first so the pendulum's rotation is banked
     // back into linear velocity, which the new attach then inherits.
     if (player.swing) releaseWeb(player, cfg, false);
-    const target = resolveWebTarget(playerCenter(player), aimDirection(), webLevel);
-    if (target.type === "anchor") {
-      attachWeb(player, target.point, cfg);
-    } else if (target.type === "enemy" && target.enemy) {
-      const hit = enemies.find((e) => e.id === target.enemy!.id);
-      // Real damage/removal is deliverable 8's job; here it's enough to prove
-      // a resolved 'enemy' shot reaches an enemy's health at all.
-      if (hit && damageEnemy(hit, 1)) {
-        enemies.splice(enemies.indexOf(hit), 1);
-      }
-    }
+    const origin = playerCenter(player);
+    const target = resolveWebTarget(origin, aimDirection(), webLevel);
+    if (target.type === "anchor") attachWeb(player, target.point, cfg);
+    webShot = {
+      to: target.point,
+      progress: 0,
+      fade: 1,
+      attached: target.type === "anchor" && Boolean(player.swing),
+      dist: Math.hypot(target.point.x - origin.x, target.point.y - origin.y),
+      hitEnemyId: target.type === "enemy" ? (target.enemy?.id ?? null) : null,
+    };
   }
+
+  stepWebShot(dt);
 
   for (const enemy of enemies) {
     const result = stepEnemy(enemy, { hitbox: playerRect(player) }, dt);
@@ -157,94 +245,55 @@ function update(dt: number): void {
 
   stepPlayer(player, input, level.platforms, cfg, dt);
 
-  // PLACEHOLDER (deliverable 8 owns win/lose and progression proper): retry on
-  // death, advance on the door, wrap at the end so a play session can walk all
-  // three layouts without a reload.
+  if (player.vel.x > FACING_SPEED) facing = 1;
+  else if (player.vel.x < -FACING_SPEED) facing = -1;
+
+  // Falling and running out of health are the same outcome, deliberately: two
+  // ways to lose that cost different amounts would push the player toward the
+  // cheap one.
   if (player.pos.y > level.killPlaneY || playerHealth <= 0) {
-    loadLevel(levelIndex);
-  } else if (overlaps(playerRect(player), doorRect(level))) {
-    loadLevel((levelIndex + 1) % LEVELS.length);
+    startRun();
+  } else if (enemies.length === 0 && overlaps(playerRect(player), doorRect(level))) {
+    // The door only counts once the level is clear. Without that gate every
+    // enemy is optional — the fastest route through a rooftop with a gunman on
+    // it is to swing straight past him — and an enemy you can ignore is not
+    // difficulty, it is scenery. render.ts draws the door barred until this is
+    // true, so the rule is visible rather than merely enforced.
+    if (levelIndex === LEVELS.length - 1) startRun();
+    else loadLevel(levelIndex + 1);
   }
 
   resetFrameEvents(input);
 }
 
-// PLACEHOLDER (deliverable 7 owns rendering): flat boxes, drawn only so the
-// physics can be felt and watched.
-function draw(): void {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// render.ts (deliverable 7) owns every pixel; this is the wiring — camera,
+// facing, and the one aim query the preview needs.
+function draw(timeMs: number): void {
+  const scene = createScene(ctx, cameraScale(canvas.width, canvas.height), timeMs);
 
-  const center = playerCenter(player);
-  const cam = cameraOffset();
-  ctx.save();
-  // Scale before translate, so the translation is in world units.
-  ctx.scale(cameraScale(), cameraScale());
-  ctx.translate(-cam.x, -cam.y);
+  // The preview calls resolveWebTarget itself, on this frame's aim, so the
+  // dotted line drawn is provably the ray the shot will use rather than a
+  // second copy of the aim math.
+  const aim = input.aiming
+    ? resolveWebTarget(playerCenter(player), aimDirection(), webLevel)
+    : null;
 
-  ctx.fillStyle = "#243352";
-  for (const plat of level.platforms) ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-
-  // The door is the level's goal, so it is the one piece of geometry that has
-  // to read as different at a glance rather than waiting for deliverable 7.
-  const door = doorRect(level);
-  ctx.fillStyle = "#ffd166";
-  ctx.fillRect(door.x, door.y, door.w, door.h);
-
-  if (player.swing) {
-    ctx.strokeStyle = "#f5f5f5";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(player.swing.anchor.x, player.swing.anchor.y);
-    ctx.lineTo(center.x, center.y);
-    ctx.stroke();
-  }
-
-  // Preview the exact ray the shot will use: resolveWebTarget itself, called
-  // before release instead of after, so the line drawn is provably the line
-  // that fires rather than a second copy of the aim math.
-  if (input.aiming) {
-    const target = resolveWebTarget(center, aimDirection(), webLevel);
-    ctx.strokeStyle =
-      target.type === "anchor"
-        ? "#7dffb4"
-        : target.type === "enemy"
-          ? "#ff6b6b"
-          : "rgba(245,245,245,0.35)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(center.x, center.y);
-    ctx.lineTo(target.point.x, target.point.y);
-    ctx.stroke();
-  }
-
-  // Telegraphing reads as a colour change here; render.ts (deliverable 7)
-  // replaces this with the arm-extend/crouch animations the brief requires.
-  for (const enemy of enemies) {
-    const hitbox = enemyHitbox(enemy);
-    const telegraphing = enemy.phase === "melee-telegraph" || enemy.phase === "throw-telegraph" || enemy.phase === "telegraph";
-    ctx.fillStyle = telegraphing ? "#ffd166" : enemy.kind === "doc-ock" ? "#8a5cf5" : "#2ec4b6";
-    ctx.fillRect(hitbox.x, hitbox.y, hitbox.w, hitbox.h);
-  }
-  ctx.fillStyle = "#ff6b6b";
-  for (const p of projectiles) {
-    const hitbox = projectileHitbox(p);
-    ctx.fillRect(hitbox.x, hitbox.y, hitbox.w, hitbox.h);
-  }
-
-  const box = playerRect(player);
-  ctx.fillStyle = player.wallSide !== 0 ? "#ffd166" : "#e63946";
-  ctx.fillRect(box.x, box.y, box.w, box.h);
-
-  ctx.restore();
-
-  // PLACEHOLDER (deliverable 7/8 own the real HUD): a bare bar, in screen
-  // space, so health changes from this deliverable's attacks are visible
-  // without a debugger. fillRect only — the game-loop sensor's recording
-  // context stubs just the calls main.ts already made.
-  ctx.fillStyle = "rgba(245,245,245,0.25)";
-  ctx.fillRect(16, 16, 160, 10);
-  ctx.fillStyle = "#7dffb4";
-  ctx.fillRect(16, 16, 160 * Math.max(playerHealth, 0) / 100, 10);
+  drawFrame(scene, view(), {
+    level,
+    player,
+    facing,
+    enemies,
+    projectiles,
+    aim,
+    shot: webShot,
+    hud: {
+      health: playerHealth,
+      maxHealth: MAX_HEALTH,
+      levelName: level.name,
+      levelIndex,
+      levelCount: LEVELS.length,
+    },
+  });
 }
 
 // Fixed timestep so physics behaves the same regardless of display refresh
@@ -270,7 +319,7 @@ function loop(now: number): void {
     accumulatorMs -= STEP_MS;
   }
 
-  draw();
+  draw(now);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

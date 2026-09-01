@@ -113,10 +113,13 @@ Deliverables for the week, roughly in build order:
    forever — indistinguishable from a frozen accumulator. It now holds a
    movement key, so it asserts input reaches the simulation *and* the
    simulation advances.
-7. Rendering, characters/graphics, and HUD (player/enemy visuals, health
-   bar, telegraphing enemy attacks).
+7. ~~Rendering, characters/graphics, and HUD (player/enemy visuals, health
+   bar, telegraphing enemy attacks)~~ — done. `render.ts` draws everything
+   procedurally (rects/circles/polygons in code, no sprite images): a posed
+   Spider-Man, a caged Doc Ock, a hulking Venom, and a HUD of health bar +
+   level pips + level name.
 
-   **The camera is done, ahead of the rest of this deliverable.** It was a
+   **The camera went first.** It was a
    plain translation, which quietly made the viewport a difficulty setting:
    at the two marking viewports (1920x1080 and 390x844) desktop saw ±960px of
    world and the phone ±195px, a 4.9x advantage, and on a phone *every* anchor
@@ -136,12 +139,205 @@ Deliverables for the week, roughly in build order:
    the spawn; level 3's parapet only says "go right" if the player starts
    beside it).
 
-   **Carried into the rest of this deliverable:** the phone renders the player
-   ~20px tall and Doc Ock ~31px wide. That is the binding constraint on the
-   telegraph work the brief calls the primary no-tutorial fairness mechanic —
-   a colour shift will survive that size, a subtle pose change will not.
-   Deliverable 11 confirms it on a real device toolbar.
-8. Game state (health, win/lose, level progression)
+   That measurement set the binding constraint for everything after it: the
+   phone renders the player ~20px tall and Doc Ock ~31px wide, so a colour
+   shift survives and a subtle pose change does not.
+
+   **Then the characters, and this is where the deliverable was actually
+   decided: every real defect was invisible in the code and obvious in a
+   magnified screenshot.** The figures type-checked, drew, animated and read
+   fine in my head; a Playwright sweep at both marking viewports (crops
+   magnified via `deviceScaleFactor` up to 8x, `?level=N` to reach the bosses
+   headlessly) is what showed that most of them were wrong. Four findings
+   changed how the renderer is built, not just its numbers:
+
+   - **A colour flash has to be on a mass, not a line — and on a mass the hue
+     must hold while the *value* moves.** Doc Ock's melee had a reach ring and
+     a pose but no "right now", because its only colour change was on 1.3px
+     tentacle strokes, which at phone zoom is a flicker the eye never catches.
+     The coat (~19px of solid area at the same zoom) now flashes for *both*
+     attacks, orange for melee to agree with the ring and yellow for the
+     throw. The first flicker paired each warning colour with a near-white
+     one; on a 2px rim that is fine, and on the coat he simply looked like he
+     was changing outfits. Both pale members were replaced with saturated deep
+     tones, so the eye reads "warning" through the whole cycle.
+   - **The primary fairness mechanic was pointing at empty sky.** The melee
+     pincers aimed at `base + dir * len` where `base.y = -46` and `dir` was
+     normalised from a feet-origin vector, so the one tell that says "this is
+     where it lands" landed a whole 46px above the player's head. Fixed as a
+     fraction *along* the target vector, capped at `armReach * 0.82` so the
+     tips stop short when he winds up at something out of range.
+   - **Silhouette beats detail, because at phone size `detail` is off.**
+     Doc Ock's tentacles ran up-and-outward at 45° with a three-fingered claw
+     on each end, which is a man holding both hands up — and read loudest
+     during the melee telegraph, when they turned yellow and the fingers
+     spread. The fix was shape, not colour: arcs that come back *down* below
+     the shoulders (an arm that comes back down is not a raised arm), a cased
+     limb rather than a tapering one, and a two-prong pincer, because a tool
+     on the end of an arm is a machine and a hand is not. The segment bands
+     vanish on a phone; the arch still reads.
+   - **Motif loses to mass at these sizes.** Three separate emblems had to
+     shrink or bend: a 7.4x5 spider on a 13px chest is a hole, not a spider,
+     and six straight bars off a white oval is a ribcage — a different monster
+     entirely, on the one character whose emblem *must* read as a spider.
+
+   The player needed a further eight fixes of the same kind, all found the same
+   way and all invisible to the type checker: a 24%-of-body head merging into
+   a same-width same-colour chest (one red blob at 20px), arms rooted at the
+   centreline rather than at shoulder *joints* so every pose crossed the chest
+   to get anywhere, no neck or jawline separating red head from red torso, a
+   ±3px stance whose front-leg halo swallowed the back leg into one blue tube,
+   mask webbing whose round line caps poked out of a 9px head as a matched
+   pair of horns, and eyes overlapping by 0.3px into a single visored band.
+   The shoulder-joint fix is the one worth remembering: it cost two lines and
+   corrected every pose at once, where the alternative was correcting each
+   pose separately and forever.
+
+   Also fixed as a no-tutorial defect rather than a graphics one: at 390x844
+   the touch controls are two identical grey circles, and the game may not say
+   which is which. The jump button now carries a chevron drawn from its own
+   CSS borders — no font, no asset, no markup change, nothing for CI to miss.
+
+   `spec/game-loop.test.ts` took two changes, both in the sensor. Its
+   recording context gained `clip()`, which the renderer started calling; the
+   absence was worth having, because that stub throws on a method it doesn't
+   know rather than silently recording half a frame. More importantly its
+   "the world advanced" assertion became a *magnitude* (>4px) rather than
+   inequality: this deliverable added wall-clock decoration (breathing, sway,
+   twinkle) that keeps moving while a frozen accumulator paints the same world
+   forever, so plain inequality would have gone green on exactly the bug the
+   sensor exists to catch.
+
+   **Carried forward:** the phone-size constraint above is now a measured
+   fact, not a prediction, and the verification loop that found all of this —
+   screenshot at both viewports, magnify, *read the frame* — is the only thing
+   that caught any of it. Deliverable 11 confirms on a real device toolbar.
+8. Game state (health, win/lose, level progression) — **mostly done, out of
+   order**, because a play-feel request landed that could not be answered
+   without it: a web-shot animation, a third enemy, a real difficulty curve,
+   and health that carries between levels. What exists now:
+
+   - **Health is a run resource.** It carries level to level and only a fresh
+     run refills it, so clearing level 2 at 12 health is a different level 3
+     from clearing it at 80. The corollary is forced, not chosen: death has to
+     restart the *run*, because a level-only retry with carried health
+     respawns you at the health that just killed you, forever. Falling and
+     bleeding out are deliberately the same outcome — two losses with
+     different costs would push the player toward the cheap one.
+   - **The door is locked until the level is clear.** Without that gate every
+     enemy is optional (the fastest route past a gunman is to swing over him),
+     and an enemy you can ignore is scenery rather than difficulty. The lock is
+     drawn as a *different object*, not a dimmed one: no glow at all, cold grey
+     instead of gold, three heavy bars across the opening. With no tutorial, a
+     door that quietly does nothing reads as broken, and "broken" is the one
+     conclusion the player must not reach; bars say *why* as well as *what*,
+     and the unlock is then the largest single visual change in the game.
+   - **A third enemy, the gunman**, deliberately the plainest figure in the
+     game. The two bosses are encounters; he is furniture with a trigger —
+     stationary, one telegraphed line of fire, and the dodge is "do not be on
+     that line when it finishes". He is also the cheapest possible teacher for
+     *the web hits enemies too*: level 1 puts one across the gap with nothing
+     else on that roof. His aim point locks at the **start** of the wind-up,
+     where both bosses re-measure at the end — that inversion is the whole
+     reason two of them at once is fair rather than a firing squad.
+   - **The web shot animates.** It used to be instantaneous, which for the
+     swing was survivable (the rope is its own feedback) but left the game's
+     one offensive action with *no* animation at all — the only evidence a shot
+     happened was a health pip going out, 14px above a head nobody is looking
+     at. One `drawWebStrand(from, to, progress)` now draws both the rope and a
+     shot in flight, which is not a saving but the reason the two read as one
+     mechanic.
+
+   Three findings worth keeping:
+
+   - **Travel time cannot be allowed to delay the swing.** Deferring
+     `attachWeb` to the strand's arrival would change deliverable 3's signed-off
+     feel *and* open a real bug: the player keeps moving during the flight, so
+     by arrival they can be outside `maxRopeLength`, where `attachWeb` silently
+     refuses and the shot does nothing at all. So there are two commit times
+     behind one animation — an anchor commits at fire and the strand catches up
+     to a rope that already exists; an enemy or a miss commits on arrival,
+     which is the case where travel time is the point. The player sees one
+     mechanic; only the physics can tell them apart.
+   - **Feedback flashes must not look like warnings.** A web hit lights a white
+     halo *behind* the enemy. White because every other flash in the game is a
+     warning the player must read, and this is the one signal going the other
+     way; behind and outside the silhouette because tinting drawn pixels means
+     compositing against a canvas that is opaque everywhere, which would wash
+     the sky as readily as the enemy.
+   - **A palette is chosen against the background, not against the cast.** The
+     gunman started cold blue-grey on the reasoning that Doc Ock owns green and
+     Venom owns black-and-white. The screenshots killed it: `#3b4664` is within
+     a few points of `ROOF` (`#3a4770`) and `FACADE` (`#28324f`), and the sky
+     behind him is `#182046` — so a "sensibly" coloured enemy was a man-shaped
+     piece of architecture, dim on desktop and nearly gone at phone scale. Warm
+     brown is the only family the city does not already use. The same crop
+     caught a same-tone neck merging his head into one pale wedge (deliverable
+     7's jawline lesson, rediscovered); a shadow-toned neck under a collar
+     fixed it.
+
+   Difficulty was tuned **without moving deliverable 6's measured geometry**.
+   The 1140px arena floor is untouched; Doc Ock's throw flight time went
+   1.4 → 1.05, which *reduces* the dodge cost from 448px of running to 336px,
+   so the measured room still fits a much faster boss.
+   Venom's telegraph floor is 350ms — below ~300ms a wind-up is a coin flip,
+   which would break the no-text fairness argument — and his `recoverMs` moved
+   *against* difficulty on purpose, because it is the only window in which the
+   player can safely aim a web at him. Every gunman is placed against the
+   targeting rule that has now bitten twice (walls beat enemies on a tie, so
+   anything on the player-to-boss ray silently eats shots): level 2's stands
+   across the exit gap rather than in the arena, and level 3's are past Venom's
+   patrol and on the landing roof. `spec/level-placement.test.ts` covers all
+   six new spawns for free.
+
+   A **second tuning pass** then landed on top of it, from play: longer enemy
+   reach (the bosses especially), significantly more damage and movement, more
+   enemy health, and a weaker web. Three of the five were straightforward
+   number moves. The other two each turned out to be a structural problem.
+
+   - **"More health" and "weaker web" were the same knob.** Enemy `health` was
+     a hit counter — `3` meant three webs — so "how tanky is this" and "how
+     hard does the web hit" could not move independently, and nothing could
+     weaken the web without making every enemy flimsier. Health is now in
+     points on the same 100-point scale as the player's, with one
+     `WEB_DAMAGE = 10` constant at the single damage call site, so
+     shots-to-kill is `ceil(health / WEB_DAMAGE)`. `render.ts`'s pips were
+     re-derived from that rather than from health, because pips drawn per point
+     would put eighty slivers over an 80-health boss; they still read "how many
+     more shots". Shots-to-kill went 1 / 4 / 2 / 4 → 1 / 7 / 3 / 8, with level
+     1's gunman deliberately left at one.
+   - **The camera puts a hard ceiling on attack range, and it is 400px.**
+     Deliverable 7's `cameraScale` means a 390x844 phone sees exactly 400 world
+     px either side of the player, so a telegraph that *begins* further out than
+     that begins off-screen — the wind-up is the entire reason a leap is fair.
+     I ignored this and took Venom's `aggroRange` to 560; the phone frame
+     refused it, showing him off the right edge at spawn with nothing on screen
+     but a sliver of his pips. So range was split in two: `aggroRange` (410,
+     where he commits) and a new `chaseRange`/`chaseSpeed` (880, where he
+     *notices* and starts walking at you). That is a bigger increase than 560
+     would have been — the distance from which he is a threat roughly doubled,
+     and the distance from which he can hit you with no warning did not move.
+     Doc Ock got the same treatment from the other end: he had no movement at
+     all, so `walkSpeed`/`advanceRange` turn his enlarged reach ring from a
+     static no-go zone into pressure that follows. He stops at 85% of
+     `armReach` (a boss standing on top of his own ring makes "safe" a place
+     you cannot reach) and holds still through both wind-ups, because both
+     attacks resolve from where he stands *at the snap* — a boss who walked
+     during his own telegraph would eat the distance the telegraph just paid
+     the player.
+
+   One bug and one wrong claim, both found by simulating rather than reasoning:
+   Venom's roam box bounded only his *walk*, so an unclamped leap could land
+   him hovering in open sky over the 480px gap (measured `x 15..1101` against a
+   stated 180..906). Clamping the leap's landing rather than refusing the leap
+   keeps the attack and reads as a short lunge. And I had written that the box
+   stops him "eating the shots meant for" the roof gunman — untrue: unlike a
+   wall, an enemy on the ray still takes the damage, so a body in the way is a
+   redirect, not a theft. Only walls steal.
+
+   **Still owed by this deliverable:** a legible *win*. Reaching the final
+   door currently starts a fresh run with no acknowledgement, which is
+   progression without an ending.
 9. One focused automated test on a mechanical rule
 10. A tuning change driven by actually playing the finished build, not by
     reading the code

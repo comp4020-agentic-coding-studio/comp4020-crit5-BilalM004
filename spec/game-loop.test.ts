@@ -20,39 +20,77 @@
 
 import { beforeAll, expect, test } from "vitest";
 
-/** One recorded frame: the fill rectangles issued between two clearRect calls. */
+/** One recorded frame: every coordinate-bearing canvas call issued between two
+ *  clearRect calls. */
 type Frame = string[];
 
 const frames: Frame[] = [];
 let pendingFrameCallbacks: FrameRequestCallback[] = [];
 let loadError: unknown = null;
 
-/** A 2D context that records instead of rasterising. Only the calls main.ts
- *  makes are implemented; the rest are no-ops so a new draw call in a later
- *  deliverable doesn't fail the sensor for the wrong reason. */
+/** A 2D context that records instead of rasterising.
+ *
+ *  It records the *arguments* of every call that carries a coordinate, and
+ *  no-ops everything else. That is wider than it needs to be on purpose:
+ *  deliverable 7 draws the player as a translated path rather than an absolute
+ *  fillRect, so a recorder that logged only fillRect went camera-invariant —
+ *  the world transform is a translate() this stub throws away, which leaves
+ *  every rooftop's fillRect at the same world coordinates frame after frame.
+ *  The sensor would have kept passing on the parallax background alone and
+ *  stopped watching the thing it was written to watch.
+ *
+ *  Recording transforms and path points instead keeps it saying nothing about
+ *  *what* is drawn — the deliberate choice above — while making "the player
+ *  moved" the signal it actually reads. */
 function recordingContext(): CanvasRenderingContext2D {
+  const log = (...args: number[]): void => {
+    frames[frames.length - 1]?.push(args.map((n) => Math.round(n * 100) / 100).join(","));
+  };
   const ctx = {
     canvas: null,
     fillStyle: "",
     strokeStyle: "",
     lineWidth: 1,
+    lineCap: "butt",
+    lineJoin: "miter",
+    lineDashOffset: 0,
+    globalAlpha: 1,
+    font: "",
+    textAlign: "left",
+    textBaseline: "alphabetic",
     clearRect: () => {
       frames.push([]);
     },
-    fillRect: (x: number, y: number, w: number, h: number) => {
-      frames[frames.length - 1]?.push(`${x},${y},${w},${h}`);
-    },
+    fillRect: log,
+    strokeRect: log,
+    translate: log,
+    rotate: log,
+    moveTo: log,
+    lineTo: log,
+    arc: log,
+    ellipse: log,
+    quadraticCurveTo: log,
+    fillText: (_text: string, x: number, y: number) => log(x, y),
     save: () => {},
     restore: () => {},
-    translate: () => {},
     scale: () => {},
     beginPath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
     stroke: () => {},
     fill: () => {},
-    arc: () => {},
     closePath: () => {},
+    setLineDash: () => {},
+    // Clipping is a no-op here for the same reason `scale` is: this stub records
+    // coordinates and has no raster to mask. Its absence is what made the sensor
+    // fail the first time the renderer clipped a path — and that failure was
+    // worth having, because it is the shape of failure this stub should give.
+    // It throws on a call it does not know rather than silently recording a
+    // partial frame, so a missing method is a named error and not a passing test
+    // that quietly stopped watching half the draw.
+    clip: () => {},
+    // Gradients are opaque handles as far as this stub cares: the renderer only
+    // ever builds one and assigns it to fillStyle.
+    createLinearGradient: () => ({ addColorStop: () => {} }),
+    createRadialGradient: () => ({ addColorStop: () => {} }),
   };
   return ctx as unknown as CanvasRenderingContext2D;
 }
@@ -125,9 +163,37 @@ test("the game paints on every animation frame", () => {
   expect(frames.length).toBeGreaterThan(1);
 });
 
+/** The largest single-coordinate difference between two frames, compared call
+ *  for call. Frames whose call counts differ at all count as changed. */
+function maxCoordDelta(a: Frame, b: Frame): number {
+  const nums = (f: Frame): number[] => f.flatMap((row) => row.split(",").map(Number));
+  const x = nums(a);
+  const y = nums(b);
+  if (x.length !== y.length) return Number.POSITIVE_INFINITY;
+  let worst = 0;
+  for (let i = 0; i < x.length; i += 1) worst = Math.max(worst, Math.abs(x[i] - y[i]));
+  return worst;
+}
+
 test("the simulation advances, rather than repainting one frozen frame", () => {
-  const first = frames.at(0)?.join(" ");
-  const last = frames.at(-1)?.join(" ");
+  const first = frames.at(0);
+  const last = frames.at(-1);
   expect(first).toBeDefined();
-  expect(last).not.toEqual(first);
+  expect(last).toBeDefined();
+
+  // A *magnitude*, not just inequality, and that distinction is the whole
+  // reason this assertion was rewritten in deliverable 7. The renderer now has
+  // decorative motion driven by wall-clock time rather than by the simulation —
+  // breathing, a swaying tentacle, a twinkling star — and wall-clock time keeps
+  // advancing while a frozen accumulator paints the same world forever. Plain
+  // inequality would have been satisfied by a 0.5px breathing bob, so the
+  // sensor would have gone green on exactly the bug it exists to catch. It
+  // survived the mutation check by luck: a frozen game leaves the player in the
+  // one pose that happens to have no time term in it.
+  //
+  // 4px is comfortably above every decorative amplitude in render.ts (the
+  // largest is a 4px tentacle sway, which moves ~0.07px per frame) and far
+  // below what one held movement key buys in 20 frames (~87px at the tuned
+  // runSpeed). It is a floor on "the world moved", not a measurement of it.
+  expect(maxCoordDelta(first!, last!)).toBeGreaterThan(4);
 });
