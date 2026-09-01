@@ -202,6 +202,16 @@ export interface DocOckEnemy {
   hitFlashMs: number;
 }
 
+/** Both cooldowns start clear rather than 0 so the first attack can't fire on
+ *  the very frame the arena loads. Found by playing: entering level 2 (even
+ *  by walking in from level 1) put a thrown block in flight before the
+ *  no-tutorial player had registered Doc Ock was there at all — the throw
+ *  branch has no armReach-style range gate the way melee does, so with a
+ *  cooldown of 0 he could open on a player who hadn't even looked yet. A
+ *  beat longer than his own longer telegraph (meleeTelegraphMs, 650ms)
+ *  guarantees an idle sighting window before either tell can start. */
+const INITIAL_COOLDOWN_MS = 1000;
+
 export function createDocOck(position: Vec2, cfg: DocOckConfig = DEFAULT_DOC_OCK): DocOckEnemy {
   return {
     kind: "doc-ock",
@@ -212,8 +222,8 @@ export function createDocOck(position: Vec2, cfg: DocOckConfig = DEFAULT_DOC_OCK
     cfg,
     phase: "idle",
     elapsedMs: 0,
-    meleeCooldownMs: 0,
-    throwCooldownMs: 0,
+    meleeCooldownMs: INITIAL_COOLDOWN_MS,
+    throwCooldownMs: INITIAL_COOLDOWN_MS,
     hitFlashMs: 0,
   };
 }
