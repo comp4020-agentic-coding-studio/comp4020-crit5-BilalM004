@@ -66,9 +66,63 @@ Deliverables for the week, roughly in build order:
    body hit the platform behind it first, on the "walls beat enemies on a
    tie" rule — fixed by deriving the spawn from the platform's own `y`
    instead of a guessed constant.
-6. Level layouts (a small number of levels, increasing difficulty)
+6. ~~Level layouts (a small number of levels, increasing difficulty)~~ — done.
+   `level.ts` is three levels of pure data (Rooftops / Doc Ock / Venom), wired
+   into `main.ts` behind a placeholder level cursor so all three can be walked
+   end to end — the only way a layout can be verified at all.
+
+   Every distance was **measured by headless simulation against the tuned
+   physics**, not guessed, because "too wide to jump" is a number the constants
+   decide: jump height 109px, longest jumpable flat gap ~211px, and a pumped
+   swing crosses 400px on ~55% of naive attempts. So a gap is either ≤170
+   (a jump) or ≥420 (a web shot) — an "almost jumpable" gap is the one width
+   that teaches nothing. Three findings changed the design rather than the
+   numbers:
+
+   - **Gaps were a staircase, not a hazard.** The first measurement said a
+     380px gap was jumpable; the tick trace showed why it wasn't — the player
+     falls in, contacts the *far* building's side face ~370px down, wall-clings
+     and climbs out. Any gap was a slower path, not a loss. Fixed structurally:
+     `killPlaneBelow()` derives `killPlaneY` as `max(y + h) + 60` so the plane
+     always sits under every building, which also makes the rule readable with
+     no text (the buildings stop; below that there is nothing to hold).
+   - **Hand arithmetic said a climbed wall couldn't be topped out** (~2px
+     short). The simulation said otherwise: the cling breaks ~38px below the
+     lip and coast + air control lands the player on top. Trusting the sim over
+     the arithmetic is what made the door towers (a required climb) viable.
+   - **Arena furniture is overhead-only.** A floor pillar in Doc Ock's arena
+     would read as cover but silently eat every web shot aimed at him, on the
+     same "walls beat enemies on a tie" rule that bit deliverable 5 — the same
+     bug rebuilt into level geometry. Beams at y≈290 sit above every
+     player-to-boss sightline; verified 0 shots stolen (23/23 and 24/24 clear).
+
+   Two smaller structural choices: `spawnEnemies` is a **factory**, not an
+   `Enemy[]`, so retrying a level never inherits the last attempt's half-dead
+   mid-telegraph boss; and `standing(platform, x, height)` derives spawn `y`
+   from the platform's own top, re-encoding deliverable 5's fix so it can't
+   regress. The brief expects no test here, so `spec/level-placement.test.ts`
+   went in as a **sensor**, not a contract test: nothing is placed inside a
+   wall, nothing floats, the kill plane is below the geometry, enemies are
+   fresh per load. Mutation-checked by re-introducing the 48px sink — it fails
+   and names the offender.
+
+   `spec/game-loop.test.ts` needed a fix, in the sensor rather than the game:
+   it had only ever passed by accident, because the scratch layout spawned the
+   player mid-air so the world moved on its own. A real level spawns them
+   standing, and a standing player in an idle world paints the same frame
+   forever — indistinguishable from a frozen accumulator. It now holds a
+   movement key, so it asserts input reaches the simulation *and* the
+   simulation advances.
 7. Rendering, characters/graphics, and HUD (player/enemy visuals, health
-   bar, telegraphing enemy attacks)
+   bar, telegraphing enemy attacks). **Carried in from deliverable 6:** the
+   camera is a plain translation, so a 390x844 phone shows only ±195px of
+   world. Level 1's opening frame was composed to survive that (roof edge
+   +94px, beam near end +97px from the spawn), but levels 2 and 3 lose their
+   ledge off-screen and Doc Ock is not even in frame at spawn — framing his
+   ~1100px arena on a phone needs roughly 2.8x zoom-out. The arenas were
+   deliberately *not* distorted to suit a camera that is about to change; the
+   camera is the thing to fix here, and deliverable 11 is where it gets
+   confirmed at both viewports.
 8. Game state (health, win/lose, level progression)
 9. One focused automated test on a mechanical rule
 10. A tuning change driven by actually playing the finished build, not by

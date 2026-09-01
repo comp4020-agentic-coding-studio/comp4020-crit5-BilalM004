@@ -1,15 +1,16 @@
 import type { Enemy, Projectile } from "./game/entities";
 import {
-  createDocOck,
-  createVenom,
   damageEnemy,
   enemyHitbox,
   projectileHitbox,
   stepEnemy,
   stepProjectile,
 } from "./game/entities";
-import type { Rect, Vec2 } from "./game/geometry";
+import type { Vec2 } from "./game/geometry";
+import { overlaps } from "./game/geometry";
 import { attachInput, createInputState, resetFrameEvents } from "./game/input";
+import type { Level } from "./game/level";
+import { LEVELS, doorRect } from "./game/level";
 import {
   DEFAULT_PHYSICS,
   attachWeb,
@@ -39,37 +40,36 @@ window.addEventListener("resize", resize);
 const input = createInputState();
 attachInput(canvas, input);
 
-// PLACEHOLDER (deliverable 6 replaces this with level.ts): a scratch layout
-// that exercises every part of the physics — a run-up, a block to wall-jump,
-// a gap too wide to jump, a high beam to swing from, and a tall wall to climb.
-const PLAYER_START: Vec2 = { x: 200, y: 600 };
-const KILL_PLANE_Y = 1400;
-const platforms: readonly Rect[] = [
-  { x: 0, y: 700, w: 900, h: 200 }, // near rooftop
-  { x: 1500, y: 700, w: 1200, h: 200 }, // far rooftop, 600px gap between
-  { x: 620, y: 380, w: 60, h: 320 }, // wall-jump block
-  { x: 1000, y: 180, w: 400, h: 40 }, // beam over the gap: the swing anchor
-  { x: 1750, y: 460, w: 260, h: 40 }, // upper ledge
-  { x: 2400, y: 200, w: 60, h: 500 }, // tall wall to climb
-];
-
 const cfg = DEFAULT_PHYSICS;
-const player = createPlayer(PLAYER_START);
-// PLACEHOLDER (deliverable 8 owns real game state): a bare number so hits from
-// this deliverable's enemies have something to land on, ahead of a real HUD.
+
+// PLACEHOLDER (deliverable 8 owns real game state): enough of a level cursor to
+// play all three levels end to end, which is the only way deliverable 6's
+// layouts can be verified at all. Reaching the door advances; dying restarts
+// the level rather than the run.
+let levelIndex = 0;
+let level: Level = LEVELS[levelIndex];
+let player = createPlayer(level.playerStart);
 let playerHealth = 100;
+let enemies: Enemy[] = level.spawnEnemies();
+let projectiles: Projectile[] = [];
 
-// PLACEHOLDER (deliverable 6 replaces this with level.ts's per-level configs):
-// one of each boss, standing on the two rooftops, so both attack patterns are
-// exercised before levels exist to house them properly.
-const enemies: Enemy[] = [
-  createDocOck({ x: 500, y: 612 }), // 700 - DOC_OCK_H, feet on the near rooftop
-  createVenom({ x: 1700, y: 630 }), // 700 - VENOM_H, feet on the far rooftop
-];
-const projectiles: Projectile[] = [];
+function loadLevel(index: number): void {
+  levelIndex = index;
+  level = LEVELS[index];
+  player = createPlayer(level.playerStart);
+  playerHealth = 100;
+  // Fresh instances, so a retry never inherits the last attempt's half-dead
+  // boss — see level.ts's spawnEnemies.
+  enemies = level.spawnEnemies();
+  projectiles = [];
+}
 
-const level: WebTargetLevel = {
-  platforms,
+// level.ts's Level satisfies web.ts's WebTargetLevel apart from `enemies`,
+// which targeting wants as hitboxes and the level stores as live entities.
+const webLevel: WebTargetLevel = {
+  get platforms() {
+    return level.platforms;
+  },
   get enemies() {
     return enemies.map((e) => ({ id: e.id, hitbox: enemyHitbox(e) }));
   },
@@ -100,7 +100,7 @@ function update(dt: number): void {
     // Re-firing mid-swing: release first so the pendulum's rotation is banked
     // back into linear velocity, which the new attach then inherits.
     if (player.swing) releaseWeb(player, cfg, false);
-    const target = resolveWebTarget(playerCenter(player), aimDirection(), level);
+    const target = resolveWebTarget(playerCenter(player), aimDirection(), webLevel);
     if (target.type === "anchor") {
       attachWeb(player, target.point, cfg);
     } else if (target.type === "enemy" && target.enemy) {
@@ -125,15 +125,15 @@ function update(dt: number): void {
     if (result.done) projectiles.splice(i, 1);
   }
 
-  stepPlayer(player, input, platforms, cfg, dt);
+  stepPlayer(player, input, level.platforms, cfg, dt);
 
-  // PLACEHOLDER (deliverable 8 owns the real loss condition): respawn so a
-  // fall or a depleted health bar doesn't end the play session.
-  if (player.pos.y > KILL_PLANE_Y || playerHealth <= 0) {
-    player.pos = { ...PLAYER_START };
-    player.vel = { x: 0, y: 0 };
-    player.swing = null;
-    playerHealth = 100;
+  // PLACEHOLDER (deliverable 8 owns win/lose and progression proper): retry on
+  // death, advance on the door, wrap at the end so a play session can walk all
+  // three layouts without a reload.
+  if (player.pos.y > level.killPlaneY || playerHealth <= 0) {
+    loadLevel(levelIndex);
+  } else if (overlaps(playerRect(player), doorRect(level))) {
+    loadLevel((levelIndex + 1) % LEVELS.length);
   }
 
   resetFrameEvents(input);
@@ -150,7 +150,13 @@ function draw(): void {
   ctx.translate(-cam.x, -cam.y);
 
   ctx.fillStyle = "#243352";
-  for (const plat of platforms) ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+  for (const plat of level.platforms) ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+
+  // The door is the level's goal, so it is the one piece of geometry that has
+  // to read as different at a glance rather than waiting for deliverable 7.
+  const door = doorRect(level);
+  ctx.fillStyle = "#ffd166";
+  ctx.fillRect(door.x, door.y, door.w, door.h);
 
   if (player.swing) {
     ctx.strokeStyle = "#f5f5f5";
@@ -165,7 +171,7 @@ function draw(): void {
   // before release instead of after, so the line drawn is provably the line
   // that fires rather than a second copy of the aim math.
   if (input.aiming) {
-    const target = resolveWebTarget(center, aimDirection(), level);
+    const target = resolveWebTarget(center, aimDirection(), webLevel);
     ctx.strokeStyle =
       target.type === "anchor"
         ? "#7dffb4"

@@ -91,6 +91,18 @@ beforeAll(async () => {
     return;
   }
 
+  // Hold a movement key for the whole recording. Without it this sensor only
+  // worked by accident: it was written against a scratch layout that spawned
+  // the player in mid-air, so the world moved on its own and a frozen loop was
+  // the only way for two frames to match. Deliverable 6's levels spawn the
+  // player standing on a roof, and a standing player in an idle world paints
+  // the same frame forever — which is correct, and which a frozen accumulator
+  // is indistinguishable from. Driving an input is what makes the two
+  // distinguishable, and it makes the sensor stronger besides: it now says
+  // input reaches the simulation *and* the simulation advances, neither of
+  // which depends on where a level happens to put the player.
+  window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyD" }));
+
   // Frame timestamps deliberately start at 0 while performance.now() is
   // already large — the exact disagreement jsdom produces, and the one a
   // browser is only promised to avoid by convention. A loop that assumes the
