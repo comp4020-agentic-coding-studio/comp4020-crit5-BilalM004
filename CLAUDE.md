@@ -338,9 +338,27 @@ Deliverables for the week, roughly in build order:
    **Still owed by this deliverable:** a legible *win*. Reaching the final
    door currently starts a fresh run with no acknowledgement, which is
    progression without an ending.
-9. One focused automated test on a mechanical rule
-10. A tuning change driven by actually playing the finished build, not by
-    reading the code
+9. ~~One focused automated test on a mechanical rule~~ — done. `spec/game.test.ts`
+   tests `resolveWebTarget` (deliverable 4) directly with plain literals, no
+   canvas or DOM: a wall resolves to an anchor, an enemy resolves to that
+   enemy, and empty space misses at `WEB_RANGE` along the aim (`0377159`).
+   The brief's own note said to ask before running the suite, even to check
+   it passes; that landed after `pnpm check` had already been run this
+   session under `CLAUDE.md`'s "run freely" instruction, so the two
+   documents disagree and the broader instruction won by the time the
+   narrower one was read. Flagged here rather than silently resolved.
+10. ~~A tuning change driven by actually playing the finished build, not by
+    reading the code~~ — done. Reloading level 2 and screenshotting
+    immediately after navigation caught Doc Ock already mid-telegraph on the
+    very first frame — before the no-tutorial player had even registered he
+    was there. `createDocOck` zero-initialized both attack cooldowns, and the
+    throw branch has no `armReach`-style range gate the way melee does, so a
+    zero cooldown let him open on a player who hadn't looked yet, from any
+    distance. Fixed by starting both cooldowns at 1000ms, a beat longer than
+    his own longest telegraph, guaranteeing an idle sighting window before
+    either tell can start (`a94d658`; logged in
+    `deliverables/10-playtest-tuning.md`). Verified live at t=0/500/1100ms,
+    not just typechecked: idle, idle, then telegraphing.
 11. Verifying controls at both marking viewports
 
 Technical detail for each deliverable (architecture, file layout, data

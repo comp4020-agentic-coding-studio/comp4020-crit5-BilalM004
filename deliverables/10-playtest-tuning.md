@@ -46,3 +46,20 @@ reconstruct it later. Tuning that came from play, not from reading code:
   threshold underneath almost all of it. The measurement also killed a
   plausible-looking option — raising `zipLift` does nothing at this impulse,
   because a typical shot's own vertical component already clears the floor.
+
+- **`a94d658` — Doc Ock's `meleeCooldownMs`/`throwCooldownMs` now start at
+  1000ms instead of 0.** Found by playing: reloading level 2 and
+  screenshotting immediately caught him already mid-telegraph on the very
+  first frame after the arena loaded — before the no-tutorial player had
+  even registered he was there. Invisible in the code, because
+  `createDocOck` zero-initializing both cooldowns reads as "ready to act
+  the moment he's relevant," not "acts before the player can react." The
+  throw branch has no `armReach`-style range gate the way melee does, so a
+  zero cooldown let him open on a player who hadn't looked yet, from any
+  distance.
+
+  The fix is a beat longer than his own longest telegraph
+  (`meleeTelegraphMs`, 650ms), which guarantees an idle sighting window
+  before either tell can start. Verified live, not just typechecked:
+  reloading the level shows him standing idle at t=0 and t=500ms, with the
+  first telegraph only appearing at t=1100ms.
