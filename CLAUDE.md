@@ -17,6 +17,44 @@ block into any new page. The card URL resolves against the page that names it,
 like any link --- `./card.png` is wrong one directory down, and nothing in CI
 checks it, so the deployed head is the only place a broken one shows up.
 
+## What we're building this week
+
+A browser game: one context-sensitive action (aim and shoot a web) that
+swings you between rooftops when it hits a wall, and damages an enemy when
+it hits one instead. Movement is otherwise WASD + jump + wall-climb by
+contact. No tutorial, no instructions screen — the opening view has to make
+the first move obvious on its own. A few short levels, enemies that get
+faster/harder as you progress, and a clear win (reach the final door) and
+loss (health hits zero, or you fall off the map).
+
+Deliverables for the week, roughly in build order:
+
+1. Game scaffolding (canvas, game loop)
+2. Input handling (keyboard on desktop, joystick + jump button + drag-to-aim
+   on touch)
+3. Movement and swing physics (feel)
+4. Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)
+5. Enemies and their projectiles
+6. Level layouts (a small number of levels, increasing difficulty)
+7. Rendering, characters/graphics, and HUD (player/enemy visuals, health
+   bar, telegraphing enemy attacks)
+8. Game state (health, win/lose, level progression)
+9. One focused automated test on a mechanical rule
+10. A tuning change driven by actually playing the finished build, not by
+    reading the code
+11. Verifying controls at both marking viewports
+
+Technical detail for each deliverable (architecture, file layout, data
+formats) is not in this file — it lives in `deliverables/`, one markdown
+brief per deliverable, loaded in only when working on that deliverable.
+
+## Ask before running tests
+
+Don't run `pnpm test`, `pnpm check`, or invoke `vitest` directly on your own
+initiative — ask first, even mid-task. Reading test files or running the
+build/typecheck alone is fine; running the test suite specifically needs a
+go-ahead.
+
 ## The checks
 
 `pnpm check` runs them, and `pnpm check:evidence` is the extra gate before you
