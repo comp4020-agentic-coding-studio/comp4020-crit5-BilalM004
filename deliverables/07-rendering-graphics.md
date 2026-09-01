@@ -16,11 +16,20 @@ canvas: player, enemies, background, HUD, and the web/trajectory line.
 - **Background** — a simple flat city-skyline silhouette, not detailed art.
 - **Player** — a simple geometric shape (no sprite sheet, no animation
   frames to author).
-- **Enemies** — a distinct shape/color from the player and background;
-  **must visibly change** (color shift, size pulse, whatever reads clearly)
-  during their telegraph window before firing (see deliverable 5) — this is
-  the primary no-tutorial fairness mechanic for combat, so it needs to be
-  unmistakable, not subtle.
+- **Enemies** — Doc Ock (level 2) and Venom (level 3, see deliverable 5)
+  need their own silhouettes, distinct from each other and from the player:
+  - **Doc Ock** — extra limb shapes reading clearly as arms, drawn visibly
+    extending toward the player during the melee telegraph; the thrown
+    block itself should look distinct from Doc Ock's body so its arc is
+    easy to track separately from him.
+  - **Venom** — a larger, distinct-silhouette shape; a crouch/wind-up pose
+    during the leap telegraph that's unmistakably different from its idle
+    pose, since that pose is the player's only warning.
+  Every telegraph (arm-extend, block-throw wind-up, leap crouch) **must
+  visibly change** (color shift, pose/shape change, whatever reads clearly)
+  before the attack lands (see deliverable 5) — this is the primary
+  no-tutorial fairness mechanic for combat, so it needs to be unmistakable,
+  not subtle, and needs to read at phone size (390×844), not just desktop.
 - **Web/trajectory** — a line from player to anchor while swinging; while
   aiming (drag held), draw the trajectory-preview points from `web.ts`
   (deliverable 4) as a dotted line/arrow so the player sees where a shot
