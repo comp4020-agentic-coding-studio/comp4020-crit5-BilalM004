@@ -48,7 +48,10 @@ const player = createPlayer(PLAYER_START);
 // PLACEHOLDER (deliverable 4 replaces this with web.ts's resolveWebTarget):
 // march along the aim ray and take the first point inside a platform. Good
 // enough to feel the swing; the real one also resolves enemies and misses.
-const WEB_RANGE = 520;
+// Derived, not chosen: a shot that reaches further than the rope can stretch
+// attaches to an anchor the constraint then has to clamp, and the clamp shows
+// up as the player teleporting toward it.
+const WEB_RANGE = cfg.maxRopeLength;
 function findAnchor(origin: Vec2, aim: Vec2): Vec2 | null {
   const len = Math.hypot(aim.x, aim.y);
   if (len < 1) return null;

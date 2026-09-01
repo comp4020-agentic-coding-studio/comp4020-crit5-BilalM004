@@ -67,6 +67,29 @@ export interface PhysicsConfig {
   /** Extra upward kick when the release came from a jump press. */
   releaseJumpKick: number;
   maxSwingSpeed: number;
+
+  // --- Zip ---
+  //
+  // A pendulum's arc bottoms out at anchor.y + length, and length is the
+  // hypotenuse, so the bottom of the arc is *always* at or below the player.
+  // A swing starting from rest therefore accelerates downward — which is fine
+  // in mid-air and fatal on the ground, where "downward" is the floor. Firing
+  // from a standstill used to attach and die in a single tick.
+  //
+  // So a shot taken while grounded or clinging doesn't start a pendulum at
+  // all: it yanks the player along the rope as ordinary free movement, and
+  // the pendulum takes over at the top of that launch, where there is room
+  // below to swing into.
+  /** Speed of the yank, along the rope toward the anchor. */
+  zipImpulse: number;
+  /** Floor on the yank's upward component, so a shot at an anchor level with
+   *  the player still gets them off the ground instead of scraping along it.
+   *  A floor rather than an addition: a near-vertical shot is already going
+   *  up hard and shouldn't also collect this. */
+  zipLift: number;
+  /** Safety valve. A zip that never reaches an apex — pinned under a ceiling,
+   *  say — lets go rather than tethering the player indefinitely. */
+  maxZipTime: number;
 }
 
 export const DEFAULT_PHYSICS: PhysicsConfig = {
@@ -96,18 +119,34 @@ export const DEFAULT_PHYSICS: PhysicsConfig = {
   swingPumpAccel: 900,
   reelSpeed: 220,
   minRopeLength: 48,
-  maxRopeLength: 420,
+  // Matches web.ts's shot range: a rope shorter than the reach would be
+  // clamped on attach, and since the constraint then snaps the player onto
+  // the circle, that clamp is a visible teleport toward the anchor.
+  maxRopeLength: 520,
   releaseBoost: 1.1,
   releaseJumpKick: 180,
   maxSwingSpeed: 1400,
+
+  zipImpulse: 760,
+  zipLift: 420,
+  maxZipTime: 0.6,
 };
+
+/** "zip" is the launch out of a standstill; "swing" is the pendulum proper.
+ *  Both draw the same rope, so to the player it reads as one continuous
+ *  action rather than two mechanics. */
+export type SwingPhase = "zip" | "swing";
 
 export interface SwingState {
   anchor: Vec2;
+  /** Only meaningful once taut, i.e. in the "swing" phase. */
   length: number;
   /** Rope angle at the anchor, radians, measured from straight down. */
   angle: number;
   angularVel: number;
+  phase: SwingPhase;
+  /** Seconds spent zipping, against cfg.maxZipTime. */
+  zipElapsed: number;
 }
 
 /** -1 = wall on the player's left, +1 = on the right, 0 = not touching one. */
@@ -195,29 +234,68 @@ export function swingVelocity(s: SwingState): Vec2 {
   return { x: t.x * speed, y: t.y * speed };
 }
 
-/** Latch onto an anchor (resolved by web.ts) without losing momentum: the
- *  player's existing velocity is projected onto the rope's tangent, so
- *  connecting mid-flight continues the arc instead of stopping dead. */
-export function attachWeb(p: PlayerState, anchor: Vec2, cfg: PhysicsConfig): void {
+/** Make the rope taut from wherever the player currently is: length and angle
+ *  come from the present offset, and the player's existing velocity is
+ *  projected onto the tangent, so going taut continues the arc instead of
+ *  stopping dead. Returns false if the anchor is out of rope range, which the
+ *  callers treat as "no swing" rather than snapping the player onto a circle
+ *  they aren't standing on. */
+function goTaut(p: PlayerState, anchor: Vec2, cfg: PhysicsConfig): boolean {
   const c = playerCenter(p);
   const rope = { x: c.x - anchor.x, y: c.y - anchor.y };
   const dist = Math.hypot(rope.x, rope.y);
-  // Degenerate case: anchor on top of the player. Nothing sensible to swing
-  // around, so refuse rather than divide by zero.
-  if (dist < 1) return;
+  // Too close to swing around, and clamping up to minRopeLength would shove
+  // the player outward by the difference. An anchor you're already against is
+  // a wall to cling to, not a rope.
+  if (dist < cfg.minRopeLength || dist > cfg.maxRopeLength) return false;
 
-  const length = Math.min(Math.max(dist, cfg.minRopeLength), cfg.maxRopeLength);
   const angle = Math.atan2(rope.x, rope.y);
   const t = tangent(angle);
 
   p.swing = {
     anchor: { x: anchor.x, y: anchor.y },
-    length,
+    length: dist,
     angle,
-    angularVel: (p.vel.x * t.x + p.vel.y * t.y) / length,
+    angularVel: (p.vel.x * t.x + p.vel.y * t.y) / dist,
+    phase: "swing",
+    zipElapsed: 0,
   };
   p.onGround = false;
   p.wallSide = 0;
+  return true;
+}
+
+/** Fire the web at an anchor (resolved by web.ts). Standing on something picks
+ *  the zip launch, mid-air picks the pendulum directly — see the Zip section of
+ *  PhysicsConfig for why a standing shot cannot simply swing. */
+export function attachWeb(p: PlayerState, anchor: Vec2, cfg: PhysicsConfig): void {
+  const grounded = p.onGround || p.wallSide !== 0;
+  if (!grounded) {
+    goTaut(p, anchor, cfg);
+    return;
+  }
+
+  const c = playerCenter(p);
+  const rope = { x: anchor.x - c.x, y: anchor.y - c.y };
+  const dist = Math.hypot(rope.x, rope.y);
+  if (dist < cfg.minRopeLength || dist > cfg.maxRopeLength) return;
+
+  p.vel.x = (rope.x / dist) * cfg.zipImpulse;
+  p.vel.y = Math.min((rope.y / dist) * cfg.zipImpulse, -cfg.zipLift);
+
+  p.swing = {
+    anchor: { x: anchor.x, y: anchor.y },
+    // Length and angle are meaningless until the rope goes taut; goTaut()
+    // recomputes both at the apex from wherever the launch actually ended up.
+    length: dist,
+    angle: 0,
+    angularVel: 0,
+    phase: "zip",
+    zipElapsed: 0,
+  };
+  p.onGround = false;
+  p.wallSide = 0;
+  p.wallRelease = 0;
 }
 
 /** Let go, converting rotation back into a linear launch. */
@@ -225,9 +303,16 @@ export function releaseWeb(p: PlayerState, cfg: PhysicsConfig, viaJump: boolean)
   const s = p.swing;
   if (!s) return;
 
-  const v = swingVelocity(s);
-  let vx = v.x * cfg.releaseBoost;
-  let vy = v.y * cfg.releaseBoost;
+  // A zip's rope was never taut, so swingVelocity() would report the rotation
+  // of a pendulum that doesn't exist. The player's own velocity is the truth,
+  // and it gets no releaseBoost: the boost pays out momentum the swing built,
+  // and a zip hasn't built any — compounding it here would just be free speed
+  // for tapping fire and jump together.
+  const zipping = s.phase === "zip";
+  const v = zipping ? p.vel : swingVelocity(s);
+  const boost = zipping ? 1 : cfg.releaseBoost;
+  let vx = v.x * boost;
+  let vy = v.y * boost;
   if (viaJump) vy -= cfg.releaseJumpKick;
 
   const speed = Math.hypot(vx, vy);
@@ -340,6 +425,9 @@ export function stepPlayer(
       const viaJump = p.jumpBuffer > 0;
       p.jumpBuffer = 0;
       releaseWeb(p, cfg, viaJump);
+    } else if (p.swing.phase === "zip") {
+      stepZip(p, intent, platforms, cfg, dt);
+      return;
     } else {
       stepSwing(p, intent, platforms, cfg, dt);
       return;
@@ -347,6 +435,43 @@ export function stepPlayer(
   }
 
   stepFree(p, intent, platforms, cfg, dt);
+}
+
+/** The launch out of a standstill. The player moves freely — air control and
+ *  collision behave exactly as normal — while the rope stays drawn, and the
+ *  pendulum engages at the apex, which is the first moment there is room below
+ *  to swing into. */
+function stepZip(
+  p: PlayerState,
+  intent: MoveIntent,
+  platforms: readonly Rect[],
+  cfg: PhysicsConfig,
+  dt: number,
+): void {
+  const s = p.swing;
+  if (!s) return;
+
+  s.zipElapsed += dt;
+  const rising = p.vel.y < 0;
+  stepFree(p, intent, platforms, cfg, dt);
+
+  // Landed again, or caught a wall: the zip delivered the player somewhere
+  // solid, which is a fine outcome. Let go rather than leaving a rope hanging
+  // off someone standing still — that was the original bug's whole shape.
+  if (p.onGround || p.wallSide !== 0) {
+    p.swing = null;
+    return;
+  }
+
+  if (s.zipElapsed >= cfg.maxZipTime) {
+    p.swing = null;
+    return;
+  }
+
+  // Apex. `rising` is sampled before the step so a zip that starts already
+  // falling (fired off a ledge) doesn't convert on its very first tick, before
+  // it has bought any height.
+  if (rising && p.vel.y >= 0 && !goTaut(p, s.anchor, cfg)) p.swing = null;
 }
 
 function stepSwing(
