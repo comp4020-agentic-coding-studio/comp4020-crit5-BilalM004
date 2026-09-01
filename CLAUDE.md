@@ -212,7 +212,7 @@ Deliverables for the week, roughly in build order:
    fact, not a prediction, and the verification loop that found all of this —
    screenshot at both viewports, magnify, *read the frame* — is the only thing
    that caught any of it. Deliverable 11 confirms on a real device toolbar.
-8. Game state (health, win/lose, level progression) — **mostly done, out of
+8. ~~Game state (health, win/lose, level progression)~~ — **done, out of
    order**, because a play-feel request landed that could not be answered
    without it: a web-shot animation, a third enemy, a real difficulty curve,
    and health that carries between levels. What exists now:
