@@ -57,6 +57,26 @@ Run `pnpm test` / `pnpm check` / `vitest` on your own initiative — no need to
 ask first. Always run them for large changes and before committing; for small
 in-progress edits, running the build/typecheck alone is fine.
 
+## Playing the build
+
+`pnpm dev` serves under the base path, so the game is at
+`http://localhost:4321/comp4020-crit5-BilalM004/` — bare `localhost:4321`
+renders the page shell without the game.
+
+**A blank canvas is usually a stale dev server, not a bug in the code.** This
+repo sits on `/mnt/c`, a WSL2 drvfs mount where inotify never fires, so a
+long-running server keeps serving the module graph it started with. The config
+now polls, but if a change doesn't appear, confirm what is actually being
+served before debugging the source:
+
+```
+curl -s http://localhost:4321/src/scripts/main.ts | head -20
+astro dev stop && pnpm dev   # when it is stale
+```
+
+Checking the served bytes first is the cheap step; it beats re-reading physics
+that was already correct.
+
 ## The checks
 
 `pnpm check` runs them, and `pnpm check:evidence` is the extra gate before you
