@@ -1,70 +1,12 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+An intuitive spider-man, level progression game, based around reaching the next level by entering a door after all enemies are defeated. Includes simple walk/jump controls as well as a simple drag to shoot web mechanic, which the user can discover allows to swing from walls, or deal damage to enemies. There is a clear health bar for the player, and for enemies, to help the user strategise their moves. Completion of all 3 levels unlocks a win screen - where the user can opt to continue playing with stronger enemies/difficulty, or replay the default settings. 
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+To manage the context window effectively, I outlined each deliverable (without deep technical details) into CLAUDE.md, but also got Claude to generate separate MD files with the deep technical pieces of information, for each deliverable. The payoff was that now, in each session, the context would not be wasted on irrelevant information to the session, instead, allowing for more space for relevant context. By being able to have more relevant details being focused on, I found myself interfering less with Claude's output, as it felt more aligned with what I was going for. [`c104acf`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-BilalM004/commit/c104acf)
 
-1. **what happened** --- the problem, or the thing that went wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
-
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** --- the standards and checks your work has to satisfy
---- rather than in a retry: a rule added to `CLAUDE.md`, a check wired up, an
-attempt thrown away. Retrying until it passes is the routine case, and changing
-what the work runs against is the skilled one.
-
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
-
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
-
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
-
-> the prompt, verbatim
-
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
-
-## Before you ship
-
-`pnpm check:evidence` verifies your citations resolve to real commits, that a
-reflection entry the marker reads is in `reflections/`, and that your
-`CLAUDE.md` is there --- before a marker ever opens the file. It checks that
-your map is traceable, not that it is good: the marker judges whether your
-small, deliberately chosen set of moments shows real judgement and reflection. A
-green check is not a substitute for that curation.
-
-Images aren't checked: unlike a citation whose SHA doesn't resolve, a broken
-image is visible the moment this file is rendered on GitHub.
+Claude's screenshot verifications found that the viewport screen size was used as a difficulty setting, which was not an intended difficulty metric (but in hindsight, could be used as one). However, unintentional behavior being caught by screenshotting the viewports and reading the frame verification method's usefulness became apparent, and was then used for every later deliverable. Seen in commit:
+[`e344220`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-BilalM004/commit/e344220)
