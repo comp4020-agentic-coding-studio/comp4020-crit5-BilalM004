@@ -1948,6 +1948,29 @@ export function drawHud(s: Scene, view: Viewport, hud: HudState): void {
   ctx.fillText(`${hud.levelName}  ·  Loop ${hud.loop + 1}`, x, pipY + 10 * u);
 }
 
+/** A minimal acknowledgement that a run finished, not a replacement frame —
+ *  the player's last pose is still visible under the wash, because main.ts
+ *  froze the simulation the moment this became true rather than resetting it.
+ *  The choice itself (#win-restart / #win-harder in index.astro) is two real
+ *  DOM buttons layered over the canvas: this only needs to say what happened,
+ *  the same information-not-instruction line drawHud already draws. */
+export function drawWinOverlay(s: Scene, view: Viewport): void {
+  const { ctx } = s;
+  ctx.fillStyle = "rgba(8,12,28,0.72)";
+  ctx.fillRect(0, 0, view.w, view.h);
+
+  const u = clamp(view.w / 1920, 0.45, 1.15);
+  ctx.fillStyle = HUD_TEXT;
+  ctx.font = `${Math.round(30 * u)}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // Fixed, not u-scaled: the DOM buttons below (index.astro's #win-screen)
+  // are a constant 48px tall regardless of viewport, so a u-scaled offset
+  // shrinks to ~27px on the phone viewport (u clamps to 0.45) and the text
+  // crowds the button row's top edge.
+  ctx.fillText("City's clear.", view.w / 2, view.h / 2 - 52);
+}
+
 // --- Frame ------------------------------------------------------------------
 
 /** A web shot mid-flight (or mid-fade), owned by main.ts.
@@ -1976,6 +1999,10 @@ export interface FrameState {
   aim: WebTarget | null;
   /** The strand travelling out from the hand, if one is in the air. */
   shot: WebShot | null;
+  /** True once the final door has been reached. main.ts freezes the
+   *  simulation the same frame this flips, so drawWinOverlay is drawing over
+   *  a still frame rather than a moving one. */
+  won: boolean;
   hud: HudState;
 }
 
@@ -2039,4 +2066,5 @@ export function drawFrame(s: Scene, view: Viewport, f: FrameState): void {
 
   ctx.restore();
   drawHud(s, view, f.hud);
+  if (f.won) drawWinOverlay(s, view);
 }

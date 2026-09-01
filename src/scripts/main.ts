@@ -44,6 +44,36 @@ window.addEventListener("resize", resize);
 const input = createInputState();
 attachInput(canvas, input);
 
+// A full clear used to be indistinguishable from dying — both silently called
+// startRun(). This is the one bit of state that tells them apart: "playing"
+// is the only phase that steps the simulation, and update() below turns into
+// a no-op the frame this flips to "won", freezing the player exactly where
+// they crossed the door for the overlay to draw over.
+type Phase = "playing" | "won";
+let phase: Phase = "playing";
+
+const winScreenEl = document.querySelector<HTMLElement>("#win-screen");
+function setWinScreenVisible(visible: boolean): void {
+  winScreenEl?.classList.toggle("visible", visible);
+}
+
+// Real DOM buttons, not canvas hit-testing: canvas has no button semantics,
+// and index.astro already layers DOM over the canvas for #touch-controls for
+// the same reason. Restart replays the current loop; increase-difficulty is
+// the auto-incrementing loopCount += 1 that used to happen on every clear,
+// now opt-in instead of automatic.
+document.querySelector<HTMLButtonElement>("#win-restart")?.addEventListener("click", () => {
+  phase = "playing";
+  setWinScreenVisible(false);
+  startRun();
+});
+document.querySelector<HTMLButtonElement>("#win-harder")?.addEventListener("click", () => {
+  phase = "playing";
+  setWinScreenVisible(false);
+  loopCount += 1;
+  startRun();
+});
+
 const cfg = DEFAULT_PHYSICS;
 
 // Health is a *run* resource, not a level one: it carries from level to level
@@ -236,6 +266,14 @@ function stepWebShot(dt: number): void {
 }
 
 function update(dt: number): void {
+  // Won: nothing left to simulate. Draining input rather than skipping it
+  // outright, so a key or drag held across the transition doesn't fire the
+  // instant the player clicks back into a fresh run.
+  if (phase !== "playing") {
+    resetFrameEvents(input);
+    return;
+  }
+
   if (input.fireWeb) {
     // Re-firing mid-swing: release first so the pendulum's rotation is banked
     // back into linear velocity, which the new attach then inherits.
@@ -305,10 +343,11 @@ function update(dt: number): void {
     // difficulty, it is scenery. render.ts draws the door barred until this is
     // true, so the rule is visible rather than merely enforced.
     if (levelIndex === LEVELS.length - 1) {
-      // A full clear, not just a death — the loop counter (and the enemies
-      // scaled from it) only advances here.
-      loopCount += 1;
-      startRun();
+      // A full clear, not a death: stop and say so, rather than silently
+      // restarting under the player. #win-restart / #win-harder decide what
+      // happens to loopCount from here.
+      phase = "won";
+      setWinScreenVisible(true);
     } else loadLevel(levelIndex + 1);
   }
 
@@ -335,6 +374,7 @@ function draw(timeMs: number): void {
     projectiles,
     aim,
     shot: webShot,
+    won: phase === "won",
     hud: {
       health: playerHealth,
       maxHealth: MAX_HEALTH,

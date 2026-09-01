@@ -107,6 +107,42 @@ canvas#game {
   border: 2px solid rgba(255, 255, 255, 0.4);
 }
 
+#win-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+#win-screen.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#win-screen button {
+  pointer-events: auto;
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(8, 12, 28, 0.85);
+  color: #f5f5f5;
+  cursor: pointer;
+}
+
+#win-screen button:hover,
+#win-screen button:focus-visible {
+  background: rgba(125, 180, 255, 0.25);
+  border-color: #7db4ff;
+}
+
 /* A chevron pointing up, because the phone screenshot at 390x844 is two
    identical grey circles side by side and the game has no tutorial to say which
    is which. The joystick reads as a joystick — it has a knob in a ring, and it
