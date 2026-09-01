@@ -48,12 +48,11 @@ Technical detail for each deliverable (architecture, file layout, data
 formats) is not in this file — it lives in `deliverables/`, one markdown
 brief per deliverable, loaded in only when working on that deliverable.
 
-## Ask before running tests
+## Running tests
 
-Don't run `pnpm test`, `pnpm check`, or invoke `vitest` directly on your own
-initiative — ask first, even mid-task. Reading test files or running the
-build/typecheck alone is fine; running the test suite specifically needs a
-go-ahead.
+Run `pnpm test` / `pnpm check` / `vitest` on your own initiative — no need to
+ask first. Always run them for large changes and before committing; for small
+in-progress edits, running the build/typecheck alone is fine.
 
 ## The checks
 
