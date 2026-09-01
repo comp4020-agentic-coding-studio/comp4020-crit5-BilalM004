@@ -335,9 +335,32 @@ Deliverables for the week, roughly in build order:
    wall, an enemy on the ray still takes the damage, so a body in the way is a
    redirect, not a theft. Only walls steal.
 
-   **Still owed by this deliverable:** a legible *win*. Reaching the final
-   door currently starts a fresh run with no acknowledgement, which is
-   progression without an ending.
+   **The still-owed win acknowledgement is now closed (`0153f30`).**
+   Reaching the final door used to call the same silent `startRun()` as
+   dying — progression with no ending. It now sets a new `phase: "playing" |
+   "won"` in `main.ts`; `update()` early-returns while `phase !== "playing"`,
+   so the world freezes exactly where the player crossed the door rather than
+   snapping back to level 1, and `draw()` stays unconditional (the loop test
+   still needs every frame painted) and passes `won` into `render.ts`'s
+   `drawFrame`, which draws a translucent wash plus one line of screen-space
+   text over the frozen frame.
+
+   The two choices are real DOM buttons over the canvas — `index.astro`
+   already does this for `#touch-controls`, for the same reason: a canvas has
+   no button semantics. Restart replays the same difficulty; "increase
+   difficulty" does what used to happen silently and automatically on every
+   clear (`loopCount += 1`), now opt-in instead of forced. Both are absent
+   from `spec/game-loop.test.ts`'s jsdom stub, so every new query in `main.ts`
+   is `?.`-guarded rather than assumed present.
+
+   One layout bug only showed up live: the canvas text's vertical offset from
+   center scaled with the HUD's `u` factor, which clamps to 0.45 on the phone
+   viewport, so the caption crowded within 5px of the buttons below it — the
+   buttons are a fixed 48px regardless of viewport, so a `u`-scaled offset
+   above them shrinks exactly where it can least afford to. Fixed by making
+   that one offset a fixed pixel value instead of `u`-scaled. Found the same
+   way as deliverable 7's graphics defects: invisible in the code, obvious in
+   a screenshot at the phone viewport.
 9. ~~One focused automated test on a mechanical rule~~ — done. `spec/game.test.ts`
    tests `resolveWebTarget` (deliverable 4) directly with plain literals, no
    canvas or DOM: a wall resolves to an anchor, an enemy resolves to that
