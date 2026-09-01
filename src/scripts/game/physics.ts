@@ -15,6 +15,11 @@ import { overlaps } from "./geometry";
 export const PLAYER_W = 26;
 export const PLAYER_H = 40;
 
+/** How far the analog stick must leave centre before a vertical push counts as
+ *  a deliberate one. Not in PhysicsConfig: it describes the input device's
+ *  noise floor, not how the game feels, so it isn't a tuning knob. */
+const CLIMB_DEADZONE = 0.3;
+
 /** Every number that decides how the game feels, in one object so deliverable
  *  10's playtest tuning is a diff to one place and not a hunt through logic. */
 export interface PhysicsConfig {
@@ -39,7 +44,9 @@ export interface PhysicsConfig {
   /** Grace period before landing where a jump press is remembered. */
   jumpBufferTime: number;
 
-  /** Climb rate up/down a wall while stuck to it (Vex-style contact climb). */
+  /** Climb rate up/down a wall while stuck to it. The climb is by contact:
+   *  holding into the wall is what drives it, so there is no separate climb
+   *  key and no state where the player hangs motionless. */
   wallClimbSpeed: number;
   /** How long the player keeps clinging after holding away from the wall.
    *  Without it a cling drops the instant the stick wobbles off-axis. */
@@ -198,6 +205,8 @@ export interface PlayerState {
  *  structurally, so game.ts can pass the input straight through. */
 export interface MoveIntent {
   moveX: number;
+  /** Positive is down. Negative is still honoured — the touch joystick sends
+   *  it — but the keyboard no longer produces it, since W is the jump. */
   moveY: number;
   jumpPressed: boolean;
   /** Set by game.ts for an explicit let-go, separate from a jump release. */
@@ -613,10 +622,23 @@ function stepFree(
   }
 
   if (p.wallSide !== 0) {
-    // Clinging: gravity is off and up/down climbs the wall by contact. No
-    // input means holding position, which reads as a deliberate grip rather
-    // than a slow slide the player has to fight.
-    p.vel.y = intent.moveY * cfg.wallClimbSpeed;
+    // Clinging: gravity is off, and holding *into* the wall climbs it. The
+    // same press that carries you into a wall carries you up it, so the climb
+    // needs no second key — and on the way over the top, that press is already
+    // the air control that lands you on the ledge instead of dropping you back
+    // down beside it.
+    //
+    // An explicit vertical push still wins, so S descends and the touch
+    // joystick keeps its full analog range. The deadzone is what makes those
+    // two rules coexist: a joystick held right reads a few percent of vertical
+    // drift, and without a threshold that drift would silently replace a
+    // full-speed climb with a crawl.
+    p.vel.y =
+      (Math.abs(intent.moveY) > CLIMB_DEADZONE
+        ? intent.moveY
+        : holdingInto
+          ? -1
+          : 0) * cfg.wallClimbSpeed;
     // Pinned horizontally: holding away from the wall feeds the release timer
     // instead of sliding the player off it. Without this the cling breaks as
     // soon as the player drifts out of probe range, which happens in a couple

@@ -15,10 +15,25 @@ input method is active:
 
 ## Desktop (keyboard + mouse)
 
-- WASD → `moveX`/`moveY`
-- Space → `jumpPressed`
+- A/D → `moveX`, S → `moveY` (down only)
+- W → `jumpPressed`
 - Mouse-down + drag on the canvas → `aiming = true`, `aimVector` = drag
   vector; mouse-up → `fireWeb` event with the final `aimVector`
+
+**Amended after playing.** The brief above originally read "WASD →
+`moveX`/`moveY`, Space → `jumpPressed`". Jump moved to W and Space was
+unbound, so the whole movement set is one hand on one key cluster. That
+costs the keyboard its "up", which the wall climb used, so climbing became
+*by contact*: holding into a wall is what drives it (`physics.ts`,
+`stepFree`). The two changes pay for each other — the press that carries you
+into a wall now carries you up it and over the top, where before you needed
+D to stick, W to climb, and D again to clear the ledge.
+
+Consequence worth stating: mid-swing rope reel-in has no key left, since S
+is reel-out and W now releases the web. The touch joystick still reels both
+ways. Reeling isn't one of the movement verbs `CLAUDE.md` names, so it is
+left touch-only rather than given a fifth key the scheme doesn't have room
+for.
 
 ## Touch (phone viewport, 390×844)
 

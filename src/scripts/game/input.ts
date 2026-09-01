@@ -59,6 +59,13 @@ export function attachInput(canvas: HTMLCanvasElement, state: InputState): void 
   attachTouchControlsVisibility();
 }
 
+/** W jumps, so there is no keyboard "up". Climbing is by contact instead:
+ *  hold into the wall and the physics reads that as a climb, which means the
+ *  hand never leaves WASD and the key that gets you *to* a wall is the same
+ *  one that gets you *up* it. Space is deliberately unbound — one movement
+ *  cluster, nothing off to the side. */
+const JUMP_KEYS = new Set(["KeyW", "ArrowUp"]);
+
 function attachKeyboard(state: InputState): void {
   const held = new Set<string>();
 
@@ -66,13 +73,16 @@ function attachKeyboard(state: InputState): void {
     const right = held.has("KeyD") || held.has("ArrowRight") ? 1 : 0;
     const left = held.has("KeyA") || held.has("ArrowLeft") ? 1 : 0;
     const down = held.has("KeyS") || held.has("ArrowDown") ? 1 : 0;
-    const up = held.has("KeyW") || held.has("ArrowUp") ? 1 : 0;
     state.moveX = right - left;
-    state.moveY = down - up;
+    // Down-only. The touch joystick still produces a full analog moveY, and
+    // physics keeps honouring negative values, so nothing downstream had to
+    // learn that one input method is short a direction.
+    state.moveY = down;
   }
 
   window.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && !e.repeat) state.jumpPressed = true;
+    // !repeat: a held W is one jump, not a jump every key-repeat interval.
+    if (JUMP_KEYS.has(e.code) && !e.repeat) state.jumpPressed = true;
     if (!held.has(e.code)) {
       held.add(e.code);
       updateMove();

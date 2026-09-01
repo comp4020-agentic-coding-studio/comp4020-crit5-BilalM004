@@ -65,26 +65,63 @@ test("a crash does not cost the player their momentum", () => {
   expect(Math.abs(p.vel.y)).toBeGreaterThan(200);
 });
 
-test("drifting into a wall still catches it, so the climb route survives", () => {
+const INTO_WALL = { moveX: 1, moveY: 0, jumpPressed: false };
+
+/** Drift right into WALL and stop the moment the cling takes. Stopping on the
+ *  event rather than after a fixed number of ticks matters now that holding
+ *  into a wall climbs it: a fixed loop runs the player straight over the top
+ *  and out the far side, and the test then reads "never stuck". */
+function clingToWall() {
   const p = createPlayer({ x: 520, y: 430 });
   p.vel = { x: 120, y: 0 };
-  const intent = { moveX: 1, moveY: 0, jumpPressed: false };
-  for (let i = 0; i < 120; i += 1) stepPlayer(p, intent, platforms, cfg, dt);
+  for (let i = 0; i < 120 && p.wallSide === 0; i += 1) {
+    stepPlayer(p, INTO_WALL, platforms, cfg, dt);
+  }
+  return p;
+}
 
-  expect(p.wallSide).not.toBe(0);
+test("drifting into a wall still catches it, so the climb route survives", () => {
+  expect(clingToWall().wallSide).not.toBe(0);
 });
 
-test("a caught wall can still be climbed", () => {
-  const p = createPlayer({ x: 520, y: 430 });
-  p.vel = { x: 120, y: 0 };
-  for (let i = 0; i < 120; i += 1) {
-    stepPlayer(p, { moveX: 1, moveY: 0, jumpPressed: false }, platforms, cfg, dt);
-  }
+test("a caught wall is climbed by holding into it, with no second key", () => {
+  // W is the jump, so there is no keyboard "up" left to climb with. Holding
+  // into the wall has to be the whole input, or the climb verb is unreachable
+  // on desktop.
+  const p = clingToWall();
   expect(p.wallSide).not.toBe(0);
 
   const startY = playerCenter(p).y;
-  for (let i = 0; i < 30; i += 1) {
-    stepPlayer(p, { moveX: 1, moveY: -1, jumpPressed: false }, platforms, cfg, dt);
-  }
+  for (let i = 0; i < 30; i += 1) stepPlayer(p, INTO_WALL, platforms, cfg, dt);
   expect(playerCenter(p).y).toBeLessThan(startY - 40);
+});
+
+test("holding down still descends a wall, so the climb goes both ways", () => {
+  const p = clingToWall();
+  expect(p.wallSide).not.toBe(0);
+
+  const startY = playerCenter(p).y;
+  for (let i = 0; i < 20; i += 1) {
+    // Still holding into the wall — that is what keeps the grip — but S wins.
+    stepPlayer(p, { moveX: 1, moveY: 1, jumpPressed: false }, platforms, cfg, dt);
+  }
+  expect(playerCenter(p).y).toBeGreaterThan(startY + 20);
+});
+
+test("a climb clears the top of the wall instead of dropping back down it", () => {
+  // The payoff of the rebinding: the press that sticks you to the wall is the
+  // press that lands you on top of it. With a separate climb key the player
+  // reaches the lip and falls back down beside it.
+  // Asserted as "did this ever happen" rather than "is it true at tick N":
+  // holding right keeps walking, so the player crosses the 60px-wide top and
+  // steps off the far side, and a fixed tick count would sample either the
+  // standing or the falling half depending on the run speed of the day.
+  const p = clingToWall();
+  let stoodOnTop = false;
+  for (let i = 0; i < 120; i += 1) {
+    stepPlayer(p, INTO_WALL, platforms, cfg, dt);
+    if (p.onGround && playerCenter(p).y < WALL.y) stoodOnTop = true;
+  }
+
+  expect(stoodOnTop).toBe(true);
 });
