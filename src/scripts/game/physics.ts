@@ -208,6 +208,11 @@ export interface MoveIntent {
   /** Positive is down. Negative is still honoured — the touch joystick sends
    *  it — but the keyboard no longer produces it, since W is the jump. */
   moveY: number;
+  /** Rope length change while swinging: negative reels in, positive out.
+   *  Separate from moveY because only a device with a real up *and* down —
+   *  the joystick — can offer reeling at all, and physics shouldn't have to
+   *  know which device it is talking to. Absent or 0 = fixed-length rope. */
+  reel?: number;
   jumpPressed: boolean;
   /** Set by game.ts for an explicit let-go, separate from a jump release. */
   releaseWeb?: boolean;
@@ -534,8 +539,13 @@ function stepSwing(
   // Reel in/out. Conserving tangential linear speed (rather than angular
   // momentum) means pulling the rope in still speeds up the swing noticeably,
   // without the r^-2 blow-up that turns a reel into a slingshot exploit.
-  if (intent.moveY !== 0) {
-    const wanted = s.length + intent.moveY * cfg.reelSpeed * dt;
+  //
+  // Driven by `reel`, not `moveY`: a device that can only express "down" has
+  // no business lengthening the rope, because a rope that only ever gets
+  // longer is a one-way ratchet the player can't undo.
+  const reel = intent.reel ?? 0;
+  if (reel !== 0) {
+    const wanted = s.length + reel * cfg.reelSpeed * dt;
     const next = Math.min(Math.max(wanted, cfg.minRopeLength), cfg.maxRopeLength);
     if (next !== s.length) {
       s.angularVel *= s.length / next;

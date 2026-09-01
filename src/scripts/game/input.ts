@@ -16,6 +16,11 @@ export type AimMode = "pointer" | "drag";
 export interface InputState {
   moveX: number;
   moveY: number;
+  /** Rope reel while swinging: negative in, positive out. Only the joystick
+   *  fills this. The keyboard has no "up" left to reel in with — W is the
+   *  jump — and a rope that could only be let out would be a one-way ratchet,
+   *  so desktop swings on a fixed-length rope instead of half a mechanic. */
+  reel: number;
   jumpPressed: boolean;
   aiming: boolean;
   aimMode: AimMode;
@@ -32,6 +37,7 @@ export function createInputState(): InputState {
   return {
     moveX: 0,
     moveY: 0,
+    reel: 0,
     jumpPressed: false,
     aiming: false,
     aimMode: "pointer",
@@ -141,6 +147,9 @@ function attachPointer(canvas: HTMLCanvasElement, state: InputState): void {
     const clampedY = Math.sin(angle) * dist;
     state.moveX = clampedX / JOYSTICK_MAX_RADIUS;
     state.moveY = clampedY / JOYSTICK_MAX_RADIUS;
+    // Same axis, two intents: vertical push both descends a wall and reels
+    // the rope. The keyboard fills only the first.
+    state.reel = state.moveY;
     if (joystickKnob) joystickKnob.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
   }
 
@@ -192,6 +201,7 @@ function attachPointer(canvas: HTMLCanvasElement, state: InputState): void {
       joystickTrack = null;
       state.moveX = 0;
       state.moveY = 0;
+      state.reel = 0;
       joystickRing?.classList.remove("active");
       positionJoystick(restJoystickPosition(), { x: 0, y: 0 });
     }

@@ -29,11 +29,18 @@ costs the keyboard its "up", which the wall climb used, so climbing became
 into a wall now carries you up it and over the top, where before you needed
 D to stick, W to climb, and D again to clear the ledge.
 
-Consequence worth stating: mid-swing rope reel-in has no key left, since S
-is reel-out and W now releases the web. The touch joystick still reels both
-ways. Reeling isn't one of the movement verbs `CLAUDE.md` names, so it is
-left touch-only rather than given a fifth key the scheme doesn't have room
-for.
+Consequence worth stating: **mid-swing rope reeling is touch-only.** With no
+keyboard "up", reeling from `moveY` would have offered S-to-lengthen and
+nothing to shorten — and a rope that can only get longer is a one-way
+ratchet, since a few taps of S pin the player at max length with no key to
+undo it. Half a mechanic is worse than none, so `InputState` gained a
+separate `reel` axis that only the joystick fills, and desktop swings on a
+fixed-length rope. Reeling isn't one of the movement verbs `CLAUDE.md`
+names, so it didn't earn a fifth key outside the cluster.
+
+`spec/rope-length.test.ts` pins that split, because "the keyboard
+deliberately cannot do this" is the kind of decision a later change undoes
+by helpfully wiring `moveY` back in.
 
 ## Touch (phone viewport, 390×844)
 
