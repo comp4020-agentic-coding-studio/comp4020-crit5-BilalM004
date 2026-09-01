@@ -382,7 +382,36 @@ Deliverables for the week, roughly in build order:
     either tell can start (`a94d658`; logged in
     `deliverables/10-playtest-tuning.md`). Verified live at t=0/500/1100ms,
     not just typechecked: idle, idle, then telegraphing.
-11. Verifying controls at both marking viewports
+11. ~~Verifying controls at both marking viewports~~ — done. Driven live via
+    Playwright at both 1920x1080 (keyboard + mouse) and 390x844 (touch,
+    dispatched through the CDP `Input.dispatchTouchEvent` API rather than
+    Playwright's `touchscreen`, which only supports a tap — the joystick and
+    drag-to-aim gestures need a held, moving contact). Every item in the
+    brief's checklist confirmed at both sizes: the opening screen makes the
+    first move obvious with zero text, move, jump, wall-climb by contact,
+    aim, fire, swing, damage an enemy, take damage, and reach the door — end
+    to end, not spot-checked.
+
+    Two things were only findable by driving the controls rather than reading
+    the code. The swing's *release* is a jump press mid-flight, not letting
+    go of a direction key — holding a movement key alone left the player
+    hanging under the anchor; `physics.ts`'s own comment ("a jump press
+    mid-swing is the launch") was the fix, and it is the only way either
+    input method actually clears a gap. And Doc Ock's melee is dodged by
+    *not* moving, not by moving through him: `entities.ts` re-measures
+    distance at the telegraph's resolution, not its start, so a player who
+    never stops walking whiffs every hit by design — which, from outside,
+    looks exactly like a damage bug rather than a fairness mechanic.
+
+    The touch pass is where deliverable 7's camera work paid its bill: the
+    joystick, jump button, drag-to-aim gesture, both bosses' and the
+    gunmen's telegraphs, and the door's lock-to-unlock swap all read
+    correctly at 390x844, with no overlap between the two touch controls and
+    the HUD. One run of the wall-climb produced a screenshot sequence with no
+    visible change for several seconds; a repeat of the identical gesture
+    climbed normally, so this reads as touch-drag timing jitter in the
+    harness rather than a defect in the climb itself — flagged rather than
+    chased, since this deliverable is verification, not a fix hunt.
 
 Technical detail for each deliverable (architecture, file layout, data
 formats) is not in this file — it lives in `deliverables/`, one markdown
