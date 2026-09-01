@@ -19,17 +19,21 @@
 // So: a gap of 170 is a jump, a gap of 420+ is a web shot, and nothing in
 // between — an "almost jumpable" gap is the one width that teaches nothing.
 
-import type { Enemy } from "./entities";
+import type { DifficultyScale, Enemy } from "./entities";
 import {
   DEFAULT_DOC_OCK,
   DEFAULT_GUNMAN,
   DEFAULT_VENOM,
   DOC_OCK_H,
   GUNMAN_H,
+  NEUTRAL_SCALE,
   VENOM_H,
   createDocOck,
   createGunman,
   createVenom,
+  scaleDocOckConfig,
+  scaleGunmanConfig,
+  scaleVenomConfig,
 } from "./entities";
 import type { Rect, Vec2 } from "./geometry";
 
@@ -43,8 +47,13 @@ export interface Level {
   /** A factory, not an array. Enemies carry mutable health and phase, so a
    *  module-level `Enemy[]` literal would hand every retry of a level the
    *  half-dead, mid-telegraph boss the last attempt left behind. Calling this
-   *  is what "load the level" means. */
-  spawnEnemies: () => Enemy[];
+   *  is what "load the level" means.
+   *
+   *  `scale` defaults to `NEUTRAL_SCALE` so every existing call site (and
+   *  every test) that spawns a level without one still gets the tuned
+   *  baseline — main.ts is the only caller that has an opinion, and it forms
+   *  that opinion from the loop counter. */
+  spawnEnemies: (scale?: DifficultyScale) => Enemy[];
   /** Top-left of the door box. Reaching it advances, but only once the level's
    *  enemies are gone — main.ts owns that rule and render.ts draws the door
    *  sealed until then, so the door is a lock the player reads rather than a
@@ -140,7 +149,9 @@ const LEVEL_1: Level = {
   // behind him to steal a shot aimed at his body — deliverable 5's bug, and
   // deliverable 6's version of it in level geometry. From the landing roof he
   // is a straight, unobstructed line.
-  spawnEnemies: () => [createGunman(standing(L1_ROOF_B, 1010, GUNMAN_H), DEFAULT_GUNMAN)],
+  spawnEnemies: (scale: DifficultyScale = NEUTRAL_SCALE) => [
+    createGunman(standing(L1_ROOF_B, 1010, GUNMAN_H), scaleGunmanConfig(DEFAULT_GUNMAN, scale)),
+  ],
   door: { x: L1_TOWER.x + (L1_TOWER.w - DOOR_W) / 2, y: L1_TOWER.y - DOOR_H },
   playerStart: { x: 360, y: L1_ROOF_A.y - 40 },
   killPlaneY: killPlaneBelow(L1_PLATFORMS),
@@ -254,9 +265,9 @@ const LEVEL_2: Level = {
   // not care which of them the player meant. Across the gap he is never on that
   // line. From the arena he is ~900px away and asleep; he wakes as the player
   // reaches the anchor.
-  spawnEnemies: () => [
-    createDocOck(standing(L2_FLOOR, 1240, DOC_OCK_H), LEVEL_2_OCK),
-    createGunman(standing(L2_EXIT, 2200, GUNMAN_H), LEVEL_2_GUNMAN),
+  spawnEnemies: (scale: DifficultyScale = NEUTRAL_SCALE) => [
+    createDocOck(standing(L2_FLOOR, 1240, DOC_OCK_H), scaleDocOckConfig(LEVEL_2_OCK, scale)),
+    createGunman(standing(L2_EXIT, 2200, GUNMAN_H), scaleGunmanConfig(LEVEL_2_GUNMAN, scale)),
   ],
   door: { x: L2_TOWER.x + (L2_TOWER.w - DOOR_W) / 2, y: L2_TOWER.y - DOOR_H },
   // 900, not the 700 this shipped with. At 700 the player stood 527px from Doc
@@ -403,10 +414,10 @@ const LEVEL_3: Level = {
   // the landing roof, so the swing across is covered from the far side exactly
   // as level 2's was, which is the one difficulty this level inherits rather
   // than invents.
-  spawnEnemies: () => [
-    createVenom(standing(L3_ROOF, 520, VENOM_H), LEVEL_3_VENOM),
-    createGunman(standing(L3_ROOF, 940, GUNMAN_H), LEVEL_3_GUNMAN),
-    createGunman(standing(L3_EXIT, 1700, GUNMAN_H), LEVEL_3_GUNMAN),
+  spawnEnemies: (scale: DifficultyScale = NEUTRAL_SCALE) => [
+    createVenom(standing(L3_ROOF, 520, VENOM_H), scaleVenomConfig(LEVEL_3_VENOM, scale)),
+    createGunman(standing(L3_ROOF, 940, GUNMAN_H), scaleGunmanConfig(LEVEL_3_GUNMAN, scale)),
+    createGunman(standing(L3_EXIT, 1700, GUNMAN_H), scaleGunmanConfig(LEVEL_3_GUNMAN, scale)),
   ],
   door: { x: L3_TOWER.x + (L3_TOWER.w - DOOR_W) / 2, y: L3_TOWER.y - DOOR_H },
   playerStart: { x: 110, y: L3_ROOF.y - 40 },

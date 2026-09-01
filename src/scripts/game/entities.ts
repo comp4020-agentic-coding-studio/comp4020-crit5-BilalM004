@@ -53,6 +53,14 @@ export const HIT_FLASH_MS = 160;
  *  arbitrary units. */
 export const WEB_DAMAGE = 10;
 
+/** What a physical swing-into-enemy body-check deals — more than a ranged web
+ *  shot, because landing it costs the player something a web shot doesn't:
+ *  they have to actually be on the rope and in reach of a counterattack when
+ *  it connects, not standing safely at range. 2.5x WEB_DAMAGE, so it still
+ *  takes a couple of body-checks on a boss rather than trivialising the fight
+ *  outright. */
+export const SWING_CONTACT_DAMAGE = 25;
+
 /** What a step function needs from the player — a structural subset of
  *  physics.ts's PlayerState, the same way web.ts's WebTargetEnemy lets
  *  entities.ts's real Enemy pass through untouched. */
@@ -371,6 +379,11 @@ export interface VenomEnemy {
   position: Vec2;
   /** Spawn x. `roamRange` is measured from here — see the config field. */
   homeX: number;
+  /** Spawn y — the platform he stands on. Venom has no platform collision at
+   *  all outside the leap's ballistic arc, so this is what a resolved leap
+   *  snaps back to (see stepVenom's leap phase) rather than trusting the arc
+   *  to land him on his feet. */
+  groundY: number;
   vel: Vec2;
   health: number;
   cfg: VenomConfig;
@@ -387,6 +400,7 @@ export function createVenom(position: Vec2, cfg: VenomConfig = DEFAULT_VENOM): V
     id: makeId("venom"),
     position: { ...position },
     homeX: position.x,
+    groundY: position.y,
     vel: { x: 0, y: 0 },
     health: cfg.health,
     cfg,
@@ -496,6 +510,16 @@ export function stepVenom(enemy: VenomEnemy, player: TargetPlayer, dt: number): 
     if (hitPlayer || arcDone) {
       enemy.phase = "recover";
       enemy.elapsedMs = 0;
+      // The arc is aimed so Venom's *centre* reaches the player's centre —
+      // right for landing a hit, since that is what makes the two hitboxes
+      // overlap, but wrong for a miss: a standing player's centre sits well
+      // above their feet, and Venom is taller than the player (70px vs
+      // 40px), so translating that centre back into his own top-left
+      // `position` leaves his feet below the platform he leapt from. Snapping
+      // y back to `groundY` here is what makes every leap end standing —
+      // whether it connected or not — instead of sinking him into the roof a
+      // little further with every miss.
+      enemy.position.y = enemy.groundY;
       // Patrol resumes from wherever it actually landed, not the old spawn.
       enemy.patrolOrigin = { ...enemy.position };
       if (hitPlayer) return { hitPlayer: true, damage: enemy.cfg.leapDamage, spawnedProjectile: null };
@@ -723,4 +747,66 @@ export function damageEnemy(enemy: Enemy, amount: number): boolean {
   enemy.health -= amount;
   enemy.hitFlashMs = HIT_FLASH_MS;
   return enemy.health <= 0;
+}
+
+// --- Difficulty scaling (the loop counter) ----------------------------------
+//
+// Reaching the final door restarts the run rather than ending the game, and
+// each restart after the first is a "loop" — main.ts counts them and hands
+// the count back here as a scale. Two independent multipliers, not one,
+// because "stronger" and "faster" are different axes level.ts already keeps
+// separate per enemy (a gunman's bullet speed isn't his health): `power`
+// scales damage and health, `speed` scales movement and projectile speed.
+//
+// Telegraph timings (meleeTelegraphMs, aimTelegraphMs, ...) are deliberately
+// left out of both. They're the fairness floor documented on VenomConfig's
+// telegraphMs — below ~300ms a wind-up stops being readable and becomes a
+// coin flip — and speeding those up with every loop would erode exactly the
+// "one readable tell" guarantee the rest of the game is built on. A looped
+// enemy hits harder and closes distance faster; it does not warn you later.
+export interface DifficultyScale {
+  /** Multiplies movement and projectile speeds. */
+  speed: number;
+  /** Multiplies damage and health. */
+  power: number;
+}
+
+/** The tuned baseline, unscaled — the first playthrough plays exactly as
+ *  deliverables 6-8 left it. */
+export const NEUTRAL_SCALE: DifficultyScale = { speed: 1, power: 1 };
+
+/** `loopCount` is 0 for the first playthrough, 1 after the first full clear,
+ *  and so on. Compounding is deliberate — a NG+ where the tenth loop feels
+ *  like the first would defeat the point of counting loops at all. */
+export function scaleForLoop(loopCount: number): DifficultyScale {
+  return { speed: 1 + loopCount * 0.12, power: 1 + loopCount * 0.15 };
+}
+
+export function scaleDocOckConfig(cfg: DocOckConfig, scale: DifficultyScale): DocOckConfig {
+  return {
+    ...cfg,
+    meleeDamage: cfg.meleeDamage * scale.power,
+    throwDamage: cfg.throwDamage * scale.power,
+    health: cfg.health * scale.power,
+    walkSpeed: cfg.walkSpeed * scale.speed,
+  };
+}
+
+export function scaleVenomConfig(cfg: VenomConfig, scale: DifficultyScale): VenomConfig {
+  return {
+    ...cfg,
+    leapDamage: cfg.leapDamage * scale.power,
+    health: cfg.health * scale.power,
+    chaseSpeed: cfg.chaseSpeed * scale.speed,
+    patrolSpeed: cfg.patrolSpeed * scale.speed,
+  };
+}
+
+export function scaleGunmanConfig(cfg: GunmanConfig, scale: DifficultyScale): GunmanConfig {
+  return {
+    ...cfg,
+    shotDamage: cfg.shotDamage * scale.power,
+    health: cfg.health * scale.power,
+    shotSpeed: cfg.shotSpeed * scale.speed,
+  };
 }

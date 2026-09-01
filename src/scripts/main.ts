@@ -1,5 +1,13 @@
 import type { Enemy, Projectile } from "./game/entities";
-import { WEB_DAMAGE, damageEnemy, enemyHitbox, stepEnemy, stepProjectile } from "./game/entities";
+import {
+  SWING_CONTACT_DAMAGE,
+  WEB_DAMAGE,
+  damageEnemy,
+  enemyHitbox,
+  scaleForLoop,
+  stepEnemy,
+  stepProjectile,
+} from "./game/entities";
 import type { Vec2 } from "./game/geometry";
 import { overlaps } from "./game/geometry";
 import { attachInput, createInputState, resetFrameEvents } from "./game/input";
@@ -73,7 +81,15 @@ let levelIndex = RUN_START;
 let level: Level = LEVELS[levelIndex];
 let player = createPlayer(level.playerStart);
 let playerHealth = MAX_HEALTH;
-let enemies: Enemy[] = level.spawnEnemies();
+
+/** How many times the final door has been reached. 0 for the first
+ *  playthrough; each full clear increments it and the *next* run's enemies
+ *  spawn stronger and faster — see entities.ts's scaleForLoop. It never
+ *  resets on death, only on a genuine clear, so dying mid-loop doesn't undo
+ *  the difficulty the player already earned. */
+let loopCount = 0;
+
+let enemies: Enemy[] = level.spawnEnemies(scaleForLoop(loopCount));
 let projectiles: Projectile[] = [];
 
 // --- The web shot ------------------------------------------------------------
@@ -117,6 +133,12 @@ let webShot: ShotState | null = null;
 let facing: Facing = 1;
 const FACING_SPEED = 24;
 
+/** Enemy ids the player is currently swing-contacting. A body-check deals its
+ *  damage once per pass rather than every frame the hitboxes stay overlapped
+ *  — an id only re-arms once contact actually breaks, so lodging inside a
+ *  boss mid-swing isn't free continuous damage. */
+const swingContactIds = new Set<string>();
+
 /** Load a level, keeping the run's health. Everything else is rebuilt. */
 function loadLevel(index: number): void {
   levelIndex = index;
@@ -126,12 +148,14 @@ function loadLevel(index: number): void {
   // the boss there, so a fresh load always faces right.
   facing = 1;
   // Fresh instances, so a retry never inherits the last attempt's half-dead
-  // boss — see level.ts's spawnEnemies.
-  enemies = level.spawnEnemies();
+  // boss — see level.ts's spawnEnemies. Scaled by the loop count, so a retry
+  // after a full clear spawns the stronger, faster version of the level.
+  enemies = level.spawnEnemies(scaleForLoop(loopCount));
   projectiles = [];
   // A strand still travelling toward the last level's geometry would otherwise
   // land, on this level, at a coordinate that means nothing here.
   webShot = null;
+  swingContactIds.clear();
 }
 
 /** Back to the start, at full health. The only thing that refills the bar. */
@@ -245,6 +269,27 @@ function update(dt: number): void {
 
   stepPlayer(player, input, level.platforms, cfg, dt);
 
+  // Swinging into an enemy is a body-check, and it costs more to land than a
+  // ranged web shot does — the player has to actually be on the rope, inside
+  // counterattack range, rather than firing safely from a distance — so it
+  // deals more damage. One hit per pass: contact only re-arms once the
+  // hitboxes separate, via swingContactIds.
+  if (player.swing) {
+    const pRect = playerRect(player);
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const enemy = enemies[i];
+      if (!overlaps(pRect, enemyHitbox(enemy))) {
+        swingContactIds.delete(enemy.id);
+        continue;
+      }
+      if (swingContactIds.has(enemy.id)) continue;
+      swingContactIds.add(enemy.id);
+      if (damageEnemy(enemy, SWING_CONTACT_DAMAGE)) enemies.splice(i, 1);
+    }
+  } else {
+    swingContactIds.clear();
+  }
+
   if (player.vel.x > FACING_SPEED) facing = 1;
   else if (player.vel.x < -FACING_SPEED) facing = -1;
 
@@ -259,8 +304,12 @@ function update(dt: number): void {
     // it is to swing straight past him — and an enemy you can ignore is not
     // difficulty, it is scenery. render.ts draws the door barred until this is
     // true, so the rule is visible rather than merely enforced.
-    if (levelIndex === LEVELS.length - 1) startRun();
-    else loadLevel(levelIndex + 1);
+    if (levelIndex === LEVELS.length - 1) {
+      // A full clear, not just a death — the loop counter (and the enemies
+      // scaled from it) only advances here.
+      loopCount += 1;
+      startRun();
+    } else loadLevel(levelIndex + 1);
   }
 
   resetFrameEvents(input);
@@ -292,6 +341,7 @@ function draw(timeMs: number): void {
       levelName: level.name,
       levelIndex,
       levelCount: LEVELS.length,
+      loop: loopCount,
     },
   });
 }

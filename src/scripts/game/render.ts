@@ -1890,6 +1890,10 @@ export interface HudState {
   levelName: string;
   levelIndex: number;
   levelCount: number;
+  /** How many times the final door has been reached — 0 on the first
+   *  playthrough. Shown as "Loop N" (1-based) so a fresh run still reads as
+   *  something rather than a blank. */
+  loop: number;
 }
 
 /** Screen space, after the world transform is popped. Information only — a
@@ -1939,7 +1943,9 @@ export function drawHud(s: Scene, view: Viewport, hud: HudState): void {
   ctx.font = `${Math.round(15 * u)}px system-ui, sans-serif`;
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  ctx.fillText(hud.levelName, x, pipY + 10 * u);
+  // "Loop 1" rather than "Loop 0" for the first playthrough — the counter is
+  // there so a player who has looped knows it, not so they can see a zero.
+  ctx.fillText(`${hud.levelName}  ·  Loop ${hud.loop + 1}`, x, pipY + 10 * u);
 }
 
 // --- Frame ------------------------------------------------------------------
