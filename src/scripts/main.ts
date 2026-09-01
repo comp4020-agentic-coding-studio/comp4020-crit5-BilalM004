@@ -9,6 +9,7 @@ import {
   releaseWeb,
   stepPlayer,
 } from "./game/physics";
+import { resolveWebTarget, type WebTargetLevel } from "./game/web";
 
 const canvasEl = document.querySelector<HTMLCanvasElement>("#game");
 if (!canvasEl) throw new Error("missing #game canvas");
@@ -45,32 +46,9 @@ const platforms: readonly Rect[] = [
 const cfg = DEFAULT_PHYSICS;
 const player = createPlayer(PLAYER_START);
 
-// PLACEHOLDER (deliverable 4 replaces this with web.ts's resolveWebTarget):
-// march along the aim ray and take the first point inside a platform. Good
-// enough to feel the swing; the real one also resolves enemies and misses.
-// Derived, not chosen: a shot that reaches further than the rope can stretch
-// attaches to an anchor the constraint then has to clamp, and the clamp shows
-// up as the player teleporting toward it.
-const WEB_RANGE = cfg.maxRopeLength;
-function findAnchor(origin: Vec2, aim: Vec2): Vec2 | null {
-  const len = Math.hypot(aim.x, aim.y);
-  if (len < 1) return null;
-  const dir = { x: aim.x / len, y: aim.y / len };
-  for (let d = 0; d <= WEB_RANGE; d += 6) {
-    const point = { x: origin.x + dir.x * d, y: origin.y + dir.y * d };
-    for (const plat of platforms) {
-      if (
-        point.x >= plat.x &&
-        point.x <= plat.x + plat.w &&
-        point.y >= plat.y &&
-        point.y <= plat.y + plat.h
-      ) {
-        return point;
-      }
-    }
-  }
-  return null;
-}
+// PLACEHOLDER (deliverable 5 adds entities.ts): no enemies exist yet, so every
+// shot can only ever resolve to 'anchor' or 'miss'.
+const level: WebTargetLevel = { platforms };
 
 // The camera is a pure translation that keeps the player at a fixed spot on
 // screen. Kept as a function rather than inlined in draw() because aiming has
@@ -97,8 +75,9 @@ function update(dt: number): void {
     // Re-firing mid-swing: release first so the pendulum's rotation is banked
     // back into linear velocity, which the new attach then inherits.
     if (player.swing) releaseWeb(player, cfg, false);
-    const anchor = findAnchor(playerCenter(player), aimDirection());
-    if (anchor) attachWeb(player, anchor, cfg);
+    const target = resolveWebTarget(playerCenter(player), aimDirection(), level);
+    if (target.type === "anchor") attachWeb(player, target.point, cfg);
+    // 'enemy' applies damage once deliverable 5 gives enemies health to lose.
   }
 
   stepPlayer(player, input, platforms, cfg, dt);
@@ -136,20 +115,21 @@ function draw(): void {
     ctx.stroke();
   }
 
-  // Preview the exact ray the shot will use, so what you see is what fires.
+  // Preview the exact ray the shot will use: resolveWebTarget itself, called
+  // before release instead of after, so the line drawn is provably the line
+  // that fires rather than a second copy of the aim math.
   if (input.aiming) {
-    const aim = aimDirection();
-    const anchor = findAnchor(center, aim);
-    ctx.strokeStyle = anchor ? "#7dffb4" : "rgba(245,245,245,0.35)";
+    const target = resolveWebTarget(center, aimDirection(), level);
+    ctx.strokeStyle =
+      target.type === "anchor"
+        ? "#7dffb4"
+        : target.type === "enemy"
+          ? "#ff6b6b"
+          : "rgba(245,245,245,0.35)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(center.x, center.y);
-    const len = Math.hypot(aim.x, aim.y) || 1;
-    const end = anchor ?? {
-      x: center.x + (aim.x / len) * WEB_RANGE,
-      y: center.y + (aim.y / len) * WEB_RANGE,
-    };
-    ctx.lineTo(end.x, end.y);
+    ctx.lineTo(target.point.x, target.point.y);
     ctx.stroke();
   }
 

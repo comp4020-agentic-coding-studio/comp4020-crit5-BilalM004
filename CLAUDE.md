@@ -38,7 +38,12 @@ Deliverables for the week, roughly in build order:
    into a wall froze the player against it (`5f2e352`). Constants were then
    tuned from play (`2f8cc91`); more may move in deliverable 10 once there
    is a finished build to play.
-4. Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)
+4. ~~Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)~~ —
+   done. `web.ts`'s `resolveWebTarget` is a pure ray-vs-AABB targeting
+   function (slab-method intersection, no marching), wired into `main.ts` in
+   place of the deliverable-3 placeholder. Enemy targeting is exercised by
+   type only for now — `entities.ts` (deliverable 5) doesn't exist yet, so
+   `main.ts` passes an empty enemy list.
 5. Enemies and their projectiles
 6. Level layouts (a small number of levels, increasing difficulty)
 7. Rendering, characters/graphics, and HUD (player/enemy visuals, health
@@ -57,9 +62,10 @@ Mark a deliverable as complete in the list above, once we have finished it.
 
 ## Running tests
 
-Run `pnpm test` / `pnpm check` / `vitest` on your own initiative — no need to
-ask first. Always run them for large changes and before committing; for small
-in-progress edits, running the build/typecheck alone is fine.
+Run `pnpm test` / `pnpm check` / `vitest` freely, on your own initiative —
+never ask first. For a minor, in-progress edit, `pnpm build`/`pnpm typecheck`
+alone is enough; run the full `pnpm check` for anything larger, and always
+before committing.
 
 ## Playing the build
 

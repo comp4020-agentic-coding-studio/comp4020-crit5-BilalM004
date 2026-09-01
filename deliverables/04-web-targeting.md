@@ -36,5 +36,5 @@ data.
 
 ## Verification
 
-Don't run `pnpm test`/`pnpm check` without asking first (per `CLAUDE.md`).
-`pnpm build`/`pnpm typecheck` alone are fine.
+`pnpm build`/`pnpm typecheck` alone is fine for a minor edit; run the full
+`pnpm check` for anything larger (see `CLAUDE.md`).

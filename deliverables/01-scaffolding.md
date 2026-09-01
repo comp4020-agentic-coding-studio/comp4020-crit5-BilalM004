@@ -31,5 +31,5 @@ deliverables — stub them if they don't exist yet).
 - Must render correctly at both marking viewports: 1920×1080 desktop and
   390×844 phone (Chrome DevTools device toolbar) — canvas sizing needs to
   handle both without layout breaking.
-- Don't run `pnpm test` / `pnpm check` without asking first (per
-  `CLAUDE.md`) — `pnpm build`/`pnpm typecheck` alone are fine to run.
+- `pnpm build`/`pnpm typecheck` alone is fine for a minor edit; run the full
+  `pnpm check` for anything larger (see `CLAUDE.md`).
