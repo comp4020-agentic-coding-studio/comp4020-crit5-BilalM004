@@ -162,7 +162,15 @@ const LEVEL_2: Level = {
   // step up happens in level 3.
   spawnEnemies: () => [createDocOck(standing(L2_FLOOR, 1240, DOC_OCK_H), DEFAULT_DOC_OCK)],
   door: { x: L2_TOWER.x + (L2_TOWER.w - DOOR_W) / 2, y: L2_TOWER.y - DOOR_H },
-  playerStart: { x: 700, y: L2_FLOOR.y - 40 },
+  // 900, not the 700 this shipped with. At 700 the player stood 527px from Doc
+  // Ock, which frames fine on a desktop and puts him off-screen entirely on a
+  // 390px-wide phone — you walked into a boss fight you had never seen. The
+  // camera can't fix that: framing 527px of world on a phone needs a zoom that
+  // renders the player 11px tall. Moving the spawn is the cheap half. It costs
+  // nothing the arena was sized for — retreat room is measured from Doc Ock
+  // (680px to the left wall, still well past the 448px a thrown block buys),
+  // and 340px of separation is far outside his 140px reach.
+  playerStart: { x: 900, y: L2_FLOOR.y - 40 },
   killPlaneY: killPlaneBelow(L2_PLATFORMS),
 };
 
@@ -208,7 +216,15 @@ const LEVEL_3_VENOM = {
 const LEVEL_3: Level = {
   name: "Venom",
   platforms: L3_PLATFORMS,
-  spawnEnemies: () => [createVenom(standing(L3_ROOF, 780, VENOM_H), LEVEL_3_VENOM)],
+  // Venom at 520, not the 780 this shipped with — the same off-screen-boss fix
+  // as level 2, applied to the enemy instead of the spawn. Here it's the spawn
+  // that has a job: the parapet at the player's back is what says "go right"
+  // without a word, and it only says it if the player starts beside it. Moving
+  // Venom instead keeps that, and it costs nothing — he still stands between
+  // the player and the gap, with 600px of roof behind him to be fought in, and
+  // at 410px he is still outside his own 300px aggro range at spawn, so he
+  // notices you as you approach rather than the instant the level loads.
+  spawnEnemies: () => [createVenom(standing(L3_ROOF, 520, VENOM_H), LEVEL_3_VENOM)],
   door: { x: L3_TOWER.x + (L3_TOWER.w - DOOR_W) / 2, y: L3_TOWER.y - DOOR_H },
   playerStart: { x: 110, y: L3_ROOF.y - 40 },
   killPlaneY: killPlaneBelow(L3_PLATFORMS),

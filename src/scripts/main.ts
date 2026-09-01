@@ -75,24 +75,54 @@ const webLevel: WebTargetLevel = {
   },
 };
 
-// The camera is a pure translation that keeps the player at a fixed spot on
-// screen. Kept as a function rather than inlined in draw() because aiming has
-// to convert a screen-space pointer into the same world space.
+// The camera shows a fixed slice of *world*, not a fixed number of pixels.
+//
+// It used to be a plain translation, which silently made the viewport a
+// difficulty setting: at the two marking viewports (1920x1080 and 390x844) the
+// desktop player saw +/-960px of world and the phone player +/-195px, a 4.9x
+// advantage. Measured, that wasn't a cosmetic difference — on a phone every
+// swing anchor and both bosses were off-screen at spawn in levels 2 and 3,
+// so the opening frame taught nothing at the size deliverable 11 marks.
+//
+// Height sets the zoom, because how much *vertical* world you can see is what
+// decides whether an overhead anchor is findable, and a phone is not short of
+// height. Width only overrides it when the screen is narrow enough that VIEW_H
+// would crop the level sideways — which is exactly the portrait case, so a
+// phone zooms out instead of cropping. Both numbers are measured, not picked:
+// VIEW_H is the smallest that keeps every level's anchors and bosses in the
+// desktop opening frame, and MIN_VIEW_W the largest that keeps the player
+// above ~20px tall on a phone.
+const VIEW_H = 860;
+const MIN_VIEW_W = 800;
+
+/** World-pixels-to-screen-pixels for the current viewport. */
+function cameraScale(): number {
+  return Math.min(canvas.height / VIEW_H, canvas.width / MIN_VIEW_W);
+}
+
+/** World coordinate drawn at the screen's top-left corner. */
 function cameraOffset(): Vec2 {
+  const s = cameraScale();
   const c = playerCenter(player);
-  return { x: c.x - canvas.width / 2, y: c.y - canvas.height * 0.6 };
+  return { x: c.x - canvas.width / (2 * s), y: c.y - (canvas.height * 0.6) / s };
+}
+
+function screenToWorld(p: Vec2): Vec2 {
+  const s = cameraScale();
+  const cam = cameraOffset();
+  return { x: p.x / s + cam.x, y: p.y / s + cam.y };
 }
 
 /** The direction a web shot travels, in world space. */
 function aimDirection(): Vec2 {
+  // A drag is a screen-space vector, and zoom is uniform, so its direction is
+  // already the world direction — converting it would divide both components
+  // by the same scale and change nothing.
   if (input.aimMode === "drag") return input.aimVector;
   // Mouse: from the player toward the cursor.
-  const cam = cameraOffset();
   const c = playerCenter(player);
-  return {
-    x: input.aimPoint.x + cam.x - c.x,
-    y: input.aimPoint.y + cam.y - c.y,
-  };
+  const w = screenToWorld(input.aimPoint);
+  return { x: w.x - c.x, y: w.y - c.y };
 }
 
 function update(dt: number): void {
@@ -147,6 +177,8 @@ function draw(): void {
   const center = playerCenter(player);
   const cam = cameraOffset();
   ctx.save();
+  // Scale before translate, so the translation is in world units.
+  ctx.scale(cameraScale(), cameraScale());
   ctx.translate(-cam.x, -cam.y);
 
   ctx.fillStyle = "#243352";

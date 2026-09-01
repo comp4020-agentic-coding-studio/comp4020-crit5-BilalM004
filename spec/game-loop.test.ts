@@ -45,6 +45,7 @@ function recordingContext(): CanvasRenderingContext2D {
     save: () => {},
     restore: () => {},
     translate: () => {},
+    scale: () => {},
     beginPath: () => {},
     moveTo: () => {},
     lineTo: () => {},

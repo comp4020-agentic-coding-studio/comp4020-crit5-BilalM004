@@ -114,15 +114,33 @@ Deliverables for the week, roughly in build order:
    movement key, so it asserts input reaches the simulation *and* the
    simulation advances.
 7. Rendering, characters/graphics, and HUD (player/enemy visuals, health
-   bar, telegraphing enemy attacks). **Carried in from deliverable 6:** the
-   camera is a plain translation, so a 390x844 phone shows only ±195px of
-   world. Level 1's opening frame was composed to survive that (roof edge
-   +94px, beam near end +97px from the spawn), but levels 2 and 3 lose their
-   ledge off-screen and Doc Ock is not even in frame at spawn — framing his
-   ~1100px arena on a phone needs roughly 2.8x zoom-out. The arenas were
-   deliberately *not* distorted to suit a camera that is about to change; the
-   camera is the thing to fix here, and deliverable 11 is where it gets
-   confirmed at both viewports.
+   bar, telegraphing enemy attacks).
+
+   **The camera is done, ahead of the rest of this deliverable.** It was a
+   plain translation, which quietly made the viewport a difficulty setting:
+   at the two marking viewports (1920x1080 and 390x844) desktop saw ±960px of
+   world and the phone ±195px, a 4.9x advantage, and on a phone *every* anchor
+   and both bosses were off-screen at spawn in levels 2 and 3. It now scales:
+   `VIEW_H = 860` sets the zoom from viewport height, and `MIN_VIEW_W = 800`
+   overrides it only when the screen is narrow enough to crop sideways, so a
+   portrait phone zooms out instead of cropping. Desktop sees 1529x860 world,
+   the phone 800x1731 — a 1.9x spread, down from 4.9x — and every landmark is
+   in frame at both. Aim needed a `screenToWorld`; a drag vector didn't,
+   because uniform zoom divides both components by the same scale.
+
+   A measured sweep showed the camera alone **cannot** fix this: framing
+   Venom at his old +657px on a 390px screen needs a zoom that renders the
+   player 11px tall. So the last of it was spawn placement — level 2's start
+   moved 700→900 and level 3's Venom 780→520, each chosen to preserve what
+   deliverable 6 measured (Doc Ock's retreat room is measured from *him*, not
+   the spawn; level 3's parapet only says "go right" if the player starts
+   beside it).
+
+   **Carried into the rest of this deliverable:** the phone renders the player
+   ~20px tall and Doc Ock ~31px wide. That is the binding constraint on the
+   telegraph work the brief calls the primary no-tutorial fairness mechanic —
+   a colour shift will survive that size, a subtle pose change will not.
+   Deliverable 11 confirms it on a real device toolbar.
 8. Game state (health, win/lose, level progression)
 9. One focused automated test on a mechanical rule
 10. A tuning change driven by actually playing the finished build, not by
