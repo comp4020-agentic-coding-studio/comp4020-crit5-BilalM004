@@ -48,6 +48,8 @@ Technical detail for each deliverable (architecture, file layout, data
 formats) is not in this file — it lives in `deliverables/`, one markdown
 brief per deliverable, loaded in only when working on that deliverable.
 
+Mark a deliverable as complete in the list above, once we have finished it.
+
 ## Running tests
 
 Run `pnpm test` / `pnpm check` / `vitest` on your own initiative — no need to
