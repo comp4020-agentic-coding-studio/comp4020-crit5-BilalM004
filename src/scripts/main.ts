@@ -1,3 +1,5 @@
+import { attachInput, createInputState, resetFrameEvents } from "./game/input";
+
 const canvasEl = document.querySelector<HTMLCanvasElement>("#game");
 if (!canvasEl) throw new Error("missing #game canvas");
 const canvas: HTMLCanvasElement = canvasEl;
@@ -13,16 +15,18 @@ function resize(): void {
 resize();
 window.addEventListener("resize", resize);
 
-// Stubs — later deliverables replace these: input handling reads real
-// devices into `input`, movement/physics mutates `state` in update(), and
-// rendering draws `state` in draw().
-const input = {};
+const input = createInputState();
+attachInput(canvas, input);
+
+// Stub — later deliverables replace this: movement/physics mutates `state`
+// in update(), and rendering draws `state` in draw().
 const state = {};
 
 function update(dt: number): void {
   void dt;
   void input;
   void state;
+  resetFrameEvents(input);
 }
 
 function draw(): void {

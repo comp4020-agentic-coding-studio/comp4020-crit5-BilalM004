@@ -30,8 +30,8 @@ loss (health hits zero, or you fall off the map).
 Deliverables for the week, roughly in build order:
 
 1. ~~Game scaffolding (canvas, game loop)~~ — done
-2. Input handling (keyboard on desktop, joystick + jump button + drag-to-aim
-   on touch)
+2. ~~Input handling (keyboard on desktop, joystick + jump button + drag-to-aim
+   on touch)~~ — done
 3. Movement and swing physics (feel)
 4. Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)
 5. Enemies and their projectiles

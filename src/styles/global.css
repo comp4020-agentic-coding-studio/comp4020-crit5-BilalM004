@@ -32,4 +32,57 @@ canvas#game {
   position: fixed;
   inset: 0;
   display: block;
+  touch-action: none;
+}
+
+#touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+#touch-controls.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#joystick-ring,
+#joystick-knob {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+}
+
+#joystick-ring {
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#joystick-ring.active {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+#joystick-knob {
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+#jump-button {
+  position: fixed;
+  right: 40px;
+  bottom: 40px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  border: 2px solid rgba(255, 255, 255, 0.4);
 }
