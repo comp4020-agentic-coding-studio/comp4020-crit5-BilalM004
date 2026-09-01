@@ -32,7 +32,8 @@ Deliverables for the week, roughly in build order:
 1. ~~Game scaffolding (canvas, game loop)~~ — done
 2. ~~Input handling (keyboard on desktop, joystick + jump button + drag-to-aim
    on touch)~~ — done
-3. Movement and swing physics (feel)
+3. ~~Movement and swing physics (feel)~~ — done (constants still to be tuned
+   by playing, in deliverable 10)
 4. Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)
 5. Enemies and their projectiles
 6. Level layouts (a small number of levels, increasing difficulty)

@@ -1,7 +1,6 @@
-export interface Vec2 {
-  x: number;
-  y: number;
-}
+import type { Vec2 } from "./geometry";
+
+export type { Vec2 };
 
 export interface InputState {
   moveX: number;
