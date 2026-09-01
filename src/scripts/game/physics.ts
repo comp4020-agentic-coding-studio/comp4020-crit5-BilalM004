@@ -153,13 +153,25 @@ export const DEFAULT_PHYSICS: PhysicsConfig = {
   releaseJumpKick: 180,
   maxSwingSpeed: 1400,
 
-  zipImpulse: 760,
+  // Playtested: at 760 a ground shot closed only ~31% of a 430px gap before
+  // the apex handed over to the pendulum, so it read as hanging rather than
+  // travelling. 1050 closes ~57% and rises 111px instead of 57. The impulse is
+  // the only knob that matters here -- it buys reach twice, once by moving
+  // faster and once by pushing the apex (and so the handoff) later.
+  zipImpulse: 1050,
+  // Now a floor that rarely binds: at this impulse a typical shot's own
+  // vertical component already clears it. Kept for the near-horizontal shot,
+  // which is the case it was added for.
   zipLift: 420,
   maxZipTime: 0.6,
 
-  // Roughly a third of maxSwingSpeed: a swing that has done any real arcing
-  // is past it, while dropping onto a wall from a stalled swing is not.
-  crashSpeed: 420,
+  // Playtested, and measured before re-picking. Pumped swings arrive at a wall
+  // at 387-1038px/s across the range of launches worth making, so 420 was not
+  // a threshold at all -- it was under almost the whole distribution, and
+  // since you pump *toward* the wall you are swinging at, nearly every arrival
+  // was a crash. 900 puts it near the top of that range: ordinary swings catch
+  // the wall and climb, and only a committed fast one throws you off.
+  crashSpeed: 900,
   crashLockTime: 0.22,
 };
 

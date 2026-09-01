@@ -28,11 +28,13 @@ const dt = 1 / 60;
 const WALL: Rect = { x: 620, y: 380, w: 60, h: 320 };
 const platforms: readonly Rect[] = [{ x: 0, y: 900, w: 2000, h: 200 }, WALL];
 
-/** Swing rightward into WALL at speed, holding into it the whole way — which
- *  is what pumping a swing toward a wall actually looks like. */
+/** Swing rightward into WALL hard, holding into it the whole way — which is
+ *  what pumping a swing toward a wall actually looks like. 1300 is chosen to
+ *  land well above crashSpeed rather than just over it, so retuning the
+ *  threshold doesn't quietly turn this fixture into the other case. */
 function crashIntoWall() {
   const p = createPlayer({ x: 300, y: 430 });
-  p.vel = { x: 900, y: 0 };
+  p.vel = { x: 1300, y: 0 };
   attachWeb(p, { x: 420, y: 250 }, cfg);
   expect(p.swing).not.toBeNull();
 
@@ -56,6 +58,34 @@ test("a swing that slams into a wall knocks the player off it", () => {
 
   const moved = Math.max(...positions) - Math.min(...positions);
   expect(moved).toBeGreaterThan(10);
+});
+
+test("an ordinary pumped swing catches the wall instead of crashing", () => {
+  // The other half of the rule, and the half that was wrong in play. Pumping
+  // is how you steer a swing, and you pump *toward* the wall you are aiming
+  // at, so an everyday arrival must land on the catch side of the threshold.
+  // With crashSpeed under the arrival-speed distribution it did not, and every
+  // swing ended in a knock-off.
+  const p = createPlayer({ x: 300, y: 430 });
+  p.vel = { x: 450, y: 0 };
+  attachWeb(p, { x: 420, y: 250 }, cfg);
+
+  const intent = { moveX: 1, moveY: 0, jumpPressed: false };
+  for (let i = 0; i < 200 && p.swing; i += 1) stepPlayer(p, intent, platforms, cfg, dt);
+  expect(p.swing).toBeNull();
+
+  // Asserted as "the cling happened", the exact mirror of the crash test's
+  // "it never did". Not sampled at a fixed tick: the grip is legitimately
+  // brief when contact lands near the top of a wall, because the climb then
+  // carries the player over the lip within a few frames — which is the climb
+  // working, not the catch failing. 12 ticks is inside crashLockTime, so a
+  // suppressed cling still reads as suppressed.
+  let caught = false;
+  for (let i = 0; i < 12; i += 1) {
+    stepPlayer(p, intent, platforms, cfg, dt);
+    if (p.wallSide !== 0) caught = true;
+  }
+  expect(caught).toBe(true);
 });
 
 test("a crash does not cost the player their momentum", () => {
