@@ -90,6 +90,25 @@ export interface PhysicsConfig {
   /** Safety valve. A zip that never reaches an apex — pinned under a ceiling,
    *  say — lets go rather than tethering the player indefinitely. */
   maxZipTime: number;
+
+  // --- Crash ---
+  //
+  // Swinging into a building drops the web either way. The question is what
+  // happens next, and the answer can't be "cling" unconditionally: you pump
+  // *toward* the wall you're swinging at, so you arrive holding into it, and
+  // an unconditional cling caught the player mid-flight and froze them —
+  // 686px/s to a dead stop, glued in place for as long as they held the key.
+  //
+  // Contact and impact are different events, so they get different outcomes:
+  // drift into a wall and you catch it and climb (the brief's wall-climb verb
+  // depends on that still working); slam into one and it knocks you off.
+  /** Swing speed at contact, at or above which the player is knocked off
+   *  instead of catching the wall. */
+  crashSpeed: number;
+  /** How long a crash suppresses wall-sticking. Without it the player is
+   *  knocked off and then instantly re-sticks on the next tick, since they're
+   *  still holding into the wall — the freeze again, one frame later. */
+  crashLockTime: number;
 }
 
 export const DEFAULT_PHYSICS: PhysicsConfig = {
@@ -130,6 +149,11 @@ export const DEFAULT_PHYSICS: PhysicsConfig = {
   zipImpulse: 760,
   zipLift: 420,
   maxZipTime: 0.6,
+
+  // Roughly a third of maxSwingSpeed: a swing that has done any real arcing
+  // is past it, while dropping onto a wall from a stalled swing is not.
+  crashSpeed: 420,
+  crashLockTime: 0.22,
 };
 
 /** "zip" is the launch out of a standstill; "swing" is the pendulum proper.
@@ -163,6 +187,10 @@ export interface PlayerState {
   coyote: number;
   jumpBuffer: number;
   wallJumpLock: number;
+  /** Suppresses wall-sticking after a crash. Separate from wallJumpLock,
+   *  which also suppresses air control — being knocked off a wall shouldn't
+   *  cost the player steering on the way down. */
+  wallStickLock: number;
   wallRelease: number;
 }
 
@@ -186,6 +214,7 @@ export function createPlayer(start: Vec2): PlayerState {
     coyote: 0,
     jumpBuffer: 0,
     wallJumpLock: 0,
+    wallStickLock: 0,
     wallRelease: 0,
   };
 }
@@ -299,7 +328,15 @@ export function attachWeb(p: PlayerState, anchor: Vec2, cfg: PhysicsConfig): voi
 }
 
 /** Let go, converting rotation back into a linear launch. */
-export function releaseWeb(p: PlayerState, cfg: PhysicsConfig, viaJump: boolean): void {
+export function releaseWeb(
+  p: PlayerState,
+  cfg: PhysicsConfig,
+  viaJump: boolean,
+  /** Overrides releaseBoost. A crash passes 1: the boost pays out momentum a
+   *  deliberate launch earned, and being slammed into a wall shouldn't earn
+   *  the player 10% for free. */
+  boostOverride?: number,
+): void {
   const s = p.swing;
   if (!s) return;
 
@@ -310,7 +347,7 @@ export function releaseWeb(p: PlayerState, cfg: PhysicsConfig, viaJump: boolean)
   // for tapping fire and jump together.
   const zipping = s.phase === "zip";
   const v = zipping ? p.vel : swingVelocity(s);
-  const boost = zipping ? 1 : cfg.releaseBoost;
+  const boost = zipping ? 1 : boostOverride ?? cfg.releaseBoost;
   let vx = v.x * boost;
   let vy = v.y * boost;
   if (viaJump) vy -= cfg.releaseJumpKick;
@@ -416,6 +453,7 @@ export function stepPlayer(
   p.coyote = Math.max(0, p.coyote - dt);
   p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
   p.wallJumpLock = Math.max(0, p.wallJumpLock - dt);
+  p.wallStickLock = Math.max(0, p.wallStickLock - dt);
   if (intent.jumpPressed) p.jumpBuffer = cfg.jumpBufferTime;
 
   if (p.swing) {
@@ -512,7 +550,21 @@ function stepSwing(
     if (!overlaps(playerRect(p), plat)) continue;
     p.pos.x = before.x;
     p.pos.y = before.y;
-    releaseWeb(p, cfg, false);
+
+    // Measured before the release, since releasing is what discards the
+    // rotation this speed is derived from.
+    const impactSpeed = Math.abs(s.angularVel * s.length);
+    releaseWeb(p, cfg, false, 1);
+
+    if (impactSpeed >= cfg.crashSpeed) {
+      // Knocked off. The velocity survives (moveAndCollide will absorb
+      // whatever component points into the wall), so the player is thrown
+      // clear and falls rather than stopping dead against it.
+      p.wallStickLock = cfg.crashLockTime;
+      p.wallSide = 0;
+      p.wallRelease = 0;
+    }
+
     stepFree(p, intent, platforms, cfg, dt);
     return;
   }
@@ -531,7 +583,8 @@ function stepFree(
   // Wall-stick: airborne, touching a wall, and either holding into it or
   // already clinging. Skipped during the wall-jump lockout, or the player
   // re-sticks to the wall they just pushed off.
-  const touching = p.onGround || p.wallJumpLock > 0 ? 0 : wallContact(p, platforms);
+  const blocked = p.onGround || p.wallJumpLock > 0 || p.wallStickLock > 0;
+  const touching = blocked ? 0 : wallContact(p, platforms);
   const holdingInto = touching !== 0 && Math.sign(intent.moveX) === touching;
 
   if (touching !== 0 && (holdingInto || p.wallSide === touching)) {
