@@ -27,3 +27,22 @@ Once you've made the change, note it (with a commit citation) in
 `PROCESS.md` when you write that up — it's one of the strongest kinds of
 evidence the brief asks for, precisely because it can't be faked by reading
 the code.
+
+## Log
+
+Kept here as it happens, so `PROCESS.md` can cite it rather than
+reconstruct it later. Tuning that came from play, not from reading code:
+
+- **`2f8cc91` — `crashSpeed` 420 → 900, `zipImpulse` 760 → 1050.** Reported
+  from playing: crashes fired too readily, and a web shot at a wall didn't
+  pull hard enough toward it. Neither was visible in the code, and both had
+  passed every numerical check — `crashSpeed` in particular had a test
+  proving the crash worked, which is exactly why nothing caught that it
+  fired on essentially *every* swing.
+
+  Worth recording as method, not just outcome: "too sensitive" is a claim
+  about a distribution, so the fix was to measure the distribution first.
+  Pumped swings arrive at a wall at 387–1038px/s, which put the old
+  threshold underneath almost all of it. The measurement also killed a
+  plausible-looking option — raising `zipLift` does nothing at this impulse,
+  because a typical shot's own vertical component already clears the floor.
