@@ -37,7 +37,13 @@ Deliverables for the week, roughly in build order:
    a web fired from the ground died in one tick (`1b1001d`), and swinging
    into a wall froze the player against it (`5f2e352`). Constants were then
    tuned from play (`2f8cc91`); more may move in deliverable 10 once there
-   is a finished build to play.
+   is a finished build to play. A third behaviour bug turned up while
+   building deliverable 4 and got fixed in `physics.ts`: a web fired
+   straight up at a close overhead platform reached it and then dropped
+   instantly, because the zip's apex handoff treated "arrived, half a
+   player-height short of the anchor" the same as a fire-time "too close to
+   swing on" refusal. Fixed by letting only that handoff clamp up to
+   `minRopeLength` instead of refusing (`spec/web-ceiling.test.ts`).
 4. ~~Web targeting (deciding what a shot hits: wall vs. enemy vs. nothing)~~ —
    done. `web.ts`'s `resolveWebTarget` is a pure ray-vs-AABB targeting
    function (slab-method intersection, no marching), wired into `main.ts` in

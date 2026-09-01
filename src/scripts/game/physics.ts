@@ -294,15 +294,24 @@ export function swingVelocity(s: SwingState): Vec2 {
  *  projected onto the tangent, so going taut continues the arc instead of
  *  stopping dead. Returns false if the anchor is out of rope range, which the
  *  callers treat as "no swing" rather than snapping the player onto a circle
- *  they aren't standing on. */
-function goTaut(p: PlayerState, anchor: Vec2, cfg: PhysicsConfig): boolean {
+ *  they aren't standing on.
+ *
+ *  `clampToMin` trades that refusal for a small snap instead: only the zip's
+ *  apex handoff passes it, because there the "too close" distance isn't an
+ *  arbitrary fire-time choice, it's the last ~half a player-height before
+ *  solid geometry — a shot at a platform directly overhead always closes to
+ *  about that gap, since the player's own body collides with it before the
+ *  center can reach the anchor. Refusing there doesn't protect against a
+ *  teleport, it just drops a web that had already arrived. */
+function goTaut(p: PlayerState, anchor: Vec2, cfg: PhysicsConfig, clampToMin = false): boolean {
   const c = playerCenter(p);
   const rope = { x: c.x - anchor.x, y: c.y - anchor.y };
-  const dist = Math.hypot(rope.x, rope.y);
-  // Too close to swing around, and clamping up to minRopeLength would shove
-  // the player outward by the difference. An anchor you're already against is
-  // a wall to cling to, not a rope.
-  if (dist < cfg.minRopeLength || dist > cfg.maxRopeLength) return false;
+  let dist = Math.hypot(rope.x, rope.y);
+  if (dist > cfg.maxRopeLength) return false;
+  if (dist < cfg.minRopeLength) {
+    if (!clampToMin) return false;
+    dist = cfg.minRopeLength;
+  }
 
   const angle = Math.atan2(rope.x, rope.y);
   const t = tangent(angle);
@@ -534,8 +543,11 @@ function stepZip(
 
   // Apex. `rising` is sampled before the step so a zip that starts already
   // falling (fired off a ledge) doesn't convert on its very first tick, before
-  // it has bought any height.
-  if (rising && p.vel.y >= 0 && !goTaut(p, s.anchor, cfg)) p.swing = null;
+  // it has bought any height. clampToMin=true: this apex is usually the zip
+  // running into the anchor's own geometry (a platform directly overhead),
+  // which stops the player a partial body-width short of the anchor — that's
+  // an arrival, not a too-close refusal.
+  if (rising && p.vel.y >= 0 && !goTaut(p, s.anchor, cfg, true)) p.swing = null;
 }
 
 function stepSwing(
