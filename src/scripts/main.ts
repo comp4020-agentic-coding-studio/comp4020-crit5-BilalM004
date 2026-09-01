@@ -69,12 +69,32 @@ function findAnchor(origin: Vec2, aim: Vec2): Vec2 | null {
   return null;
 }
 
+// The camera is a pure translation that keeps the player at a fixed spot on
+// screen. Kept as a function rather than inlined in draw() because aiming has
+// to convert a screen-space pointer into the same world space.
+function cameraOffset(): Vec2 {
+  const c = playerCenter(player);
+  return { x: c.x - canvas.width / 2, y: c.y - canvas.height * 0.6 };
+}
+
+/** The direction a web shot travels, in world space. */
+function aimDirection(): Vec2 {
+  if (input.aimMode === "drag") return input.aimVector;
+  // Mouse: from the player toward the cursor.
+  const cam = cameraOffset();
+  const c = playerCenter(player);
+  return {
+    x: input.aimPoint.x + cam.x - c.x,
+    y: input.aimPoint.y + cam.y - c.y,
+  };
+}
+
 function update(dt: number): void {
   if (input.fireWeb) {
     // Re-firing mid-swing: release first so the pendulum's rotation is banked
     // back into linear velocity, which the new attach then inherits.
     if (player.swing) releaseWeb(player, cfg, false);
-    const anchor = findAnchor(playerCenter(player), input.fireWeb);
+    const anchor = findAnchor(playerCenter(player), aimDirection());
     if (anchor) attachWeb(player, anchor, cfg);
   }
 
@@ -97,10 +117,9 @@ function draw(): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const center = playerCenter(player);
-  const camX = center.x - canvas.width / 2;
-  const camY = center.y - canvas.height * 0.6;
+  const cam = cameraOffset();
   ctx.save();
-  ctx.translate(-camX, -camY);
+  ctx.translate(-cam.x, -cam.y);
 
   ctx.fillStyle = "#243352";
   for (const plat of platforms) ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
@@ -114,16 +133,18 @@ function draw(): void {
     ctx.stroke();
   }
 
+  // Preview the exact ray the shot will use, so what you see is what fires.
   if (input.aiming) {
-    const anchor = findAnchor(center, input.aimVector);
+    const aim = aimDirection();
+    const anchor = findAnchor(center, aim);
     ctx.strokeStyle = anchor ? "#7dffb4" : "rgba(245,245,245,0.35)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(center.x, center.y);
-    const len = Math.hypot(input.aimVector.x, input.aimVector.y) || 1;
+    const len = Math.hypot(aim.x, aim.y) || 1;
     const end = anchor ?? {
-      x: center.x + (input.aimVector.x / len) * WEB_RANGE,
-      y: center.y + (input.aimVector.y / len) * WEB_RANGE,
+      x: center.x + (aim.x / len) * WEB_RANGE,
+      y: center.y + (aim.y / len) * WEB_RANGE,
     };
     ctx.lineTo(end.x, end.y);
     ctx.stroke();

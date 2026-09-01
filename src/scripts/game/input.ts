@@ -2,13 +2,30 @@ import type { Vec2 } from "./geometry";
 
 export type { Vec2 };
 
+/** How the aim direction is read from the pointer. The two input methods keep
+ *  the same *gesture* (press, drag, release) but not the same vector math,
+ *  because the constraint on each is different:
+ *
+ *  - "pointer" (mouse): direction is player -> cursor. The web goes where you
+ *    point, which is the only reading a player guesses without being told.
+ *  - "drag" (touch): the drag delta itself is the direction. The thumb zone is
+ *    half the screen, so aiming at the finger would make everything left of
+ *    the player unreachable; a drag keeps all 360 degrees available. */
+export type AimMode = "pointer" | "drag";
+
 export interface InputState {
   moveX: number;
   moveY: number;
   jumpPressed: boolean;
   aiming: boolean;
+  aimMode: AimMode;
+  /** Current pointer position in viewport pixels (the canvas fills it). */
+  aimPoint: Vec2;
+  /** Pointer travel since the press that began this aim. */
   aimVector: Vec2;
-  fireWeb: Vec2 | null;
+  /** One-shot: an aim was released this step. The direction comes from
+   *  aimMode + aimPoint/aimVector, which still hold their release values. */
+  fireWeb: boolean;
 }
 
 export function createInputState(): InputState {
@@ -17,16 +34,18 @@ export function createInputState(): InputState {
     moveY: 0,
     jumpPressed: false,
     aiming: false,
+    aimMode: "pointer",
+    aimPoint: { x: 0, y: 0 },
     aimVector: { x: 0, y: 0 },
-    fireWeb: null,
+    fireWeb: false,
   };
 }
 
-// jumpPressed/fireWeb are one-shot events; the consumer (game.ts, once it
-// exists) calls this after reading them each fixed step.
+// jumpPressed/fireWeb are one-shot events; the consumer calls this after
+// reading them each fixed step.
 export function resetFrameEvents(state: InputState): void {
   state.jumpPressed = false;
-  state.fireWeb = null;
+  state.fireWeb = false;
 }
 
 const JUMP_BUTTON_MARGIN = 84; // matches #jump-button's CSS center (40px inset + 44px half-width)
@@ -115,11 +134,17 @@ function attachPointer(canvas: HTMLCanvasElement, state: InputState): void {
     if (joystickKnob) joystickKnob.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
   }
 
+  function beginAim(e: PointerEvent, mode: AimMode): void {
+    aimTrack = { pointerId: e.pointerId, origin: { x: e.clientX, y: e.clientY } };
+    state.aiming = true;
+    state.aimMode = mode;
+    state.aimPoint = { x: e.clientX, y: e.clientY };
+    state.aimVector = { x: 0, y: 0 };
+  }
+
   canvas.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse") {
-      aimTrack = { pointerId: e.pointerId, origin: { x: e.clientX, y: e.clientY } };
-      state.aiming = true;
-      state.aimVector = { x: 0, y: 0 };
+      beginAim(e, "pointer");
       return;
     }
 
@@ -131,14 +156,13 @@ function attachPointer(canvas: HTMLCanvasElement, state: InputState): void {
       joystickRing?.classList.add("active");
       positionJoystick({ x: e.clientX, y: e.clientY }, { x: 0, y: 0 });
     } else if (zone === "aim" && !aimTrack) {
-      aimTrack = { pointerId: e.pointerId, origin: { x: e.clientX, y: e.clientY } };
-      state.aiming = true;
-      state.aimVector = { x: 0, y: 0 };
+      beginAim(e, "drag");
     }
   });
 
   canvas.addEventListener("pointermove", (e) => {
     if (aimTrack && e.pointerId === aimTrack.pointerId) {
+      state.aimPoint = { x: e.clientX, y: e.clientY };
       state.aimVector = { x: e.clientX - aimTrack.origin.x, y: e.clientY - aimTrack.origin.y };
     } else if (joystickTrack && e.pointerId === joystickTrack.pointerId) {
       setJoystickOffset(e.clientX - joystickTrack.origin.x, e.clientY - joystickTrack.origin.y);
@@ -147,7 +171,7 @@ function attachPointer(canvas: HTMLCanvasElement, state: InputState): void {
 
   function endAim(e: PointerEvent): void {
     if (aimTrack && e.pointerId === aimTrack.pointerId) {
-      state.fireWeb = { ...state.aimVector };
+      state.fireWeb = true;
       state.aiming = false;
       aimTrack = null;
     }
@@ -168,7 +192,12 @@ function attachPointer(canvas: HTMLCanvasElement, state: InputState): void {
     endJoystick(e);
   });
   canvas.addEventListener("pointercancel", (e) => {
-    endAim(e);
+    // A cancelled pointer is an interrupted gesture, not a shot: drop the aim
+    // without firing.
+    if (aimTrack && e.pointerId === aimTrack.pointerId) {
+      state.aiming = false;
+      aimTrack = null;
+    }
     endJoystick(e);
   });
 }
